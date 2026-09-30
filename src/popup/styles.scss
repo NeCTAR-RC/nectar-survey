@@ -1,0 +1,75 @@
+// What the popup adds to the library's Dialog, Link, Button and
+// CheckboxGroup styles, which arrive in the same shadow root. Every value is
+// an ARDC UI React token.
+
+@use "@ardc-ui/react/styles/variables" as *;
+@use "@ardc-ui/react/styles/typography" as *;
+
+// Host pages (Bootstrap 3 among them) pass inherited styles such as colour,
+// line height and text alignment into the shadow tree; `all: initial` stops
+// that. The host keeps a real, empty box (its only child is fixed) rather
+// than `display: contents`: without a box, Chromium's hit testing returns
+// the page root instead of the host for clicks on the popup.
+:host {
+  all: initial;
+  display: block;
+}
+
+// The overlay is a fixed layer in the page, not the browser's top layer, so
+// it needs a stacking order above whatever the host has: Bootstrap 3 fixed
+// navbars and modals sit at 1030 to 1050. The library has no token for this;
+// the popup takes the highest value, since it opens before anything else.
+.overlayLayer {
+  position: relative;
+  z-index: 2147483647;
+  font-family: $font-family-base;
+  color: $text-color-body-strong;
+}
+
+.eyebrow {
+  @include text-style(body-12-bold);
+  display: block;
+  margin-bottom: $spacing-1;
+  color: $brand-purple-500;
+  text-transform: uppercase;
+  // The library's spacing for capitalised labels (Select group headers).
+  letter-spacing: 0.05em;
+}
+
+.paragraphs {
+  display: flex;
+  flex-direction: column;
+  gap: $dialog-body-gap;
+
+  p {
+    margin: 0;
+  }
+
+  strong {
+    font-weight: $font-weight-bold;
+  }
+
+  a {
+    @include text-style(body-16-link);
+    border-radius: $border-radius;
+    outline: $focus-ring-width solid transparent;
+    outline-offset: $focus-ring-offset-start;
+
+    &:hover {
+      color: $secondary-purple-700;
+    }
+
+    &:focus-visible {
+      outline-color: $focus-outline-color;
+      outline-offset: $focus-ring-offset;
+    }
+  }
+}
+
+// The actions row wraps; a full-width item puts the checkbox on a line of its
+// own beneath the two actions, a spacing step further down than the gap
+// between wrapped lines.
+.dontShowAgain {
+  flex-basis: 100%;
+  margin-top: $spacing-1;
+}

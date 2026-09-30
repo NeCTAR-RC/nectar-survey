@@ -1,0 +1,25 @@
+{
+  "surveys": [
+    {
+      "id": "nectar-2026",
+      "enabled": false,
+      "opens": "2026-10-13T00:00",
+      "closes": "2026-11-14T23:59",
+      "timezone": "Australia/Melbourne",
+      "services": "all",
+      "eyebrow": "Nectar research cloud survey",
+      "title": "Tell us about your {service} experience",
+      "body": [
+        "We're running a short survey about the {service}, open from <strong>13 October to 14 November</strong>. It takes less than 5 minutes and helps us improve this service for the research community.",
+        "Leave your email at the end and go in the draw to win one of five <strong>$100 gift cards</strong>."
+      ],
+      "url": "",
+      "urls": {
+        "Nectar Dashboard": ""
+      },
+      "startLabel": "Start survey",
+      "laterLabel": "Not right now",
+      "dismissLabel": "Don't show me this again"
+    }
+  ]
+}

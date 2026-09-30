@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nectar survey popup demo</title>
+    <!-- Plain stand-in for a host page. It is deliberately not ARDC-styled,
+         so the popup is seen the way it appears on a service it does not
+         control. -->
+    <style>
+      body {
+        margin: 0;
+        font-family: system-ui, sans-serif;
+        line-height: 1.5;
+      }
+      .host-header {
+        padding: 12px 16px;
+        background: #555;
+        color: #fff;
+        font-weight: bold;
+      }
+      main {
+        max-width: 720px;
+        padding: 16px;
+      }
+      fieldset {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="host-header">Nectar Dashboard (demo)</header>
+    <main>
+      <h1>Nectar survey popup demo</h1>
+      <p>
+        This page loads the survey popup the same way a Nectar service does: one
+        script plus the <code>&lt;nectar-survey&gt;</code> element. On a host
+        service the popup reads <code>surveys.json</code> from the same folder
+        the script came from; this demo points it at
+        <code>surveys.demo.json</code> instead, which holds an enabled survey
+        open from 13 October to 14 November 2026.
+      </p>
+      <p>
+        The demo pretends it is 20 October 2026, 10:00, so the popup shows on
+        your first visit whatever today's date is. Change the date below, clear
+        it to use the real date and time, or add <code>?now=</code> to the
+        address (for example <code>?now=2026-11-15T10:00</code>). Once the popup
+        has shown, it waits until the next day; "Reset saved state" makes this
+        browser forget every past invitation and checks again.
+      </p>
+      <fieldset>
+        <legend>Demo controls</legend>
+        <label for="demo-now">Pretend the date is</label>
+        <input id="demo-now" type="datetime-local" />
+        <button id="demo-reset" type="button">Reset saved state</button>
+      </fieldset>
+    </main>
+
+    <nectar-survey
+      id="demo-popup"
+      service="Nectar Dashboard"
+      config-url="./surveys.demo.json"
+      now="2026-10-20T10:00"
+    ></nectar-survey>
+
+    <!-- A classic inline script runs while the page is parsed, before the
+         popup script (deferred or a module) defines the element, so a ?now=
+         value is in place before the element first evaluates. -->
+    <script>
+      (function () {
+        var popup = document.getElementById("demo-popup");
+        var nowControl = document.getElementById("demo-now");
+        var resetButton = document.getElementById("demo-reset");
+
+        // ?now=<ISO date or date and time> overrides the demo date;
+        // an empty ?now= uses the real date and time.
+        var params = new URLSearchParams(location.search);
+        if (params.has("now")) {
+          var requested = params.get("now");
+          if (requested) popup.setAttribute("now", requested);
+          else popup.removeAttribute("now");
+        }
+        nowControl.value = (popup.getAttribute("now") || "").slice(0, 16);
+
+        nowControl.addEventListener("change", function () {
+          if (nowControl.value) popup.setAttribute("now", nowControl.value);
+          else popup.removeAttribute("now");
+        });
+
+        resetButton.addEventListener("click", function () {
+          customElements
+            .whenDefined("nectar-survey")
+            .then(function (NectarSurvey) {
+              NectarSurvey.resetState();
+              popup.refresh();
+            });
+        });
+      })();
+    </script>
+
+    <script type="module" src="/src/index.ts"></script>
+  </body>
+</html>

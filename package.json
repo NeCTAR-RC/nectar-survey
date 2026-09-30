@@ -1,0 +1,70 @@
+{
+  "name": "nectar-survey",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:editor": "vite --config vite.editor.config.ts",
+    "build": "tsc -b && vite build && vite build --config vite.editor.config.ts",
+    "lint:js": "eslint .",
+    "lint:scss": "stylelint --allow-empty-input \"src/**/*.scss\" \"editor/**/*.scss\"",
+    "lint": "pnpm lint:js && pnpm lint:scss && pnpm format:check",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:install": "playwright install chromium",
+    "test:coverage": "vitest run --coverage",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "prepare": "node scripts/install-git-hooks.mjs"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix"
+    ],
+    "*.scss": [
+      "stylelint --fix"
+    ],
+    "*.{ts,tsx,scss,css,json,md,html}": [
+      "prettier --write"
+    ]
+  },
+  "dependencies": {
+    "@ardc-ui/react": "^5.0.6",
+    "@internationalized/date": "^3.12.4",
+    "react": "^19.3.0",
+    "react-aria": "3.52.1",
+    "react-aria-components": "^1.21.1",
+    "react-dom": "^19.3.0",
+    "react-stately": "3.50.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "1.61.1",
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "@vitest/coverage-v8": "4.1.11",
+    "eslint": "^10.9.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.7",
+    "globals": "^17.11.0",
+    "jsdom": "^30.0.1",
+    "lint-staged": "^17.3.0",
+    "prettier": "3.9.6",
+    "sass": "^1.103.1",
+    "stylelint": "^17.14.1",
+    "stylelint-config-recommended-scss": "^17.0.1",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.67.0",
+    "vite": "^8.2.2",
+    "vite-plugin-css-injected-by-js": "^5.0.2",
+    "vitest": "4.1.11"
+  },
+  "packageManager": "pnpm@10.32.1+sha512.a706938f0e89ac1456b6563eab4edf1d1faf3368d1191fc5c59790e96dc918e4456ab2e67d613de1043d2e8c81f87303e6b40d4ffeca9df15ef1ad567348f2be"
+}

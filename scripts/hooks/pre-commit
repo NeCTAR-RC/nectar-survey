@@ -1,0 +1,4 @@
+#!/usr/bin/env sh
+# Managed by scripts/install-git-hooks.mjs. Do not edit in .git/hooks; edit here.
+# nectar-survey managed hook: pre-commit
+pnpm exec lint-staged

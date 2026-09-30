@@ -1,0 +1,9 @@
+# Build and test output
+dist
+coverage
+playwright-report
+test-results
+
+# Generated files
+pnpm-lock.yaml
+pnpm-workspace.yaml

@@ -1,0 +1,12 @@
+#!/usr/bin/env sh
+# Managed by scripts/install-git-hooks.mjs. Do not edit in .git/hooks; edit here.
+# nectar-survey managed hook: pre-push
+# Mirror the Jenkins patchset gates (lint + test + test-e2e): fail locally iff CI
+# would. The e2e step matches nodejs-test-e2e (build, install chromium, run e2e).
+# Heavy by design. Set ARDC_HOOKS=0 or `git push --no-verify` to bypass when needed.
+set -e
+pnpm lint
+pnpm test
+pnpm build
+pnpm test:e2e:install
+pnpm test:e2e

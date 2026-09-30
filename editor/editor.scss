@@ -1,0 +1,807 @@
+// Document styles for the config editor. The controls are the library's own
+// components and bring their CSS with them; this file only lays out the page
+// and styles the few plain elements around them, from the library's tokens.
+
+@use "@ardc-ui/react/styles/fonts";
+@use "@ardc-ui/react/styles/variables" as *;
+@use "@ardc-ui/react/styles/typography" as *;
+
+// Below this width the header scrolls away and form grids are one column.
+$_wide-from: 640px;
+// From here the survey list sits beside the form and the tabs follow the
+// form; below it the list, the form and the tabs stack.
+$_two-columns-from: 1024px;
+// From here the tabs take a third column of their own.
+$_three-columns-from: 1280px;
+$_page-max-width: 1680px;
+$_nav-width: 17rem;
+$_nav-width-narrow: 16rem;
+$_side-max-width: 30rem;
+// Where the library's tab panel begins below the top of the tab strip: a
+// tab's padding, its line and its top rule, less the rule by which the
+// selected tab overlaps the panel.
+$_tab-strip-height: $tab-padding * 2 + $tab-line-height;
+// Space kept between the sticky header and the sticky columns.
+$_side-offset: $spacing-6;
+// What the sticky side column keeps above and below its panel: the offsets
+// from the header and the window's foot, and the tab strip.
+$_side-panel-offset: $_side-offset * 2 + $_tab-strip-height;
+// What sits above and below the side panel's scrolling body: the header, the
+// offsets with the tab strip, and the panel's own border.
+$_side-body-inset: calc(
+  var(--editor-header-height) + #{$_side-panel-offset} + #{$border-width * 2}
+);
+// Room for focus rings inside a scroll box, given back outside it.
+$_ring-room: $spacing-2;
+
+// A list row's leading rule (purple when selected) and its side padding.
+$_row-rule-width: $border-width * 3;
+$_row-padding-x: $spacing-3;
+
+// A list row of three lines (number and id, title, states) and the least
+// of the list a sticky pane keeps in view: two such rows.
+$_row-lines: $line-height-body-14 * 2 + $line-height-body-12;
+$_row-height: $_row-lines + $spacing-1 * 2 + $spacing-2 * 2;
+$_rows-min-height: $_row-height * 2 + $spacing-1;
+
+// A column that stays in view under the sticky header, at most as tall as
+// the window below it.
+@mixin _sticky-column {
+  position: sticky;
+  top: calc(var(--editor-header-height) + #{$_side-offset});
+  max-height: calc(100vh - var(--editor-header-height) - #{$_side-offset * 2});
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background-color: $neutral-gray-50;
+
+  @include text-style(body-16);
+}
+
+h1 {
+  margin: 0;
+
+  @include text-style(h3);
+}
+
+h2 {
+  margin: 0 0 $spacing-4;
+
+  @include text-style(h4);
+}
+
+h3 {
+  margin: 0 0 $spacing-2;
+
+  @include text-style(h5);
+}
+
+p {
+  margin: 0;
+}
+
+code,
+pre {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: $font-size-sm;
+}
+
+pre {
+  margin: $spacing-2 0 $spacing-4;
+  padding: $spacing-3;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background-color: $neutral-gray-100;
+  border-radius: $border-radius;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.plain-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  > li + li {
+    margin-top: $spacing-1;
+  }
+}
+
+.plain-list-bulleted {
+  margin: 0;
+  padding-left: $spacing-5;
+
+  > li + li {
+    margin-top: $spacing-2;
+  }
+}
+
+.editor {
+  // Written by `useHeightProperty` in App.tsx; zero until it is measured.
+  --editor-header-height: 0px;
+
+  min-height: 100vh;
+}
+
+.editor-header {
+  background-color: $neutral-white;
+  border-bottom: $border-width solid $neutral-gray-100;
+
+  @media (min-width: $_wide-from) {
+    position: sticky;
+    top: 0;
+    // Above the layout, which is its own stacking context (see below).
+    z-index: 1;
+  }
+}
+
+.editor-header-inner,
+.editor-main {
+  max-width: $_page-max-width;
+  margin: 0 auto;
+  padding-inline: $spacing-4;
+
+  @media (min-width: $_wide-from) {
+    padding-inline: $spacing-8;
+  }
+}
+
+.editor-header-inner {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-3;
+  padding-block: $spacing-4;
+}
+
+.editor-header-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: $spacing-4 $spacing-8;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.editor-heading {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-1;
+  min-width: 0;
+}
+
+.editor-subtitle {
+  @include text-style(body-14-muted);
+}
+
+.editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: $spacing-2;
+  align-items: center;
+}
+
+.editor-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: $spacing-1 $spacing-3;
+  align-items: center;
+
+  @include text-style(body-14);
+}
+
+.editor-status-reason {
+  color: $semantic-red-700;
+  font-weight: $font-weight-semibold;
+}
+
+.editor-main {
+  padding-block: $spacing-8 $spacing-16;
+}
+
+.start {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-6;
+  align-items: center;
+  padding-block: $spacing-8;
+}
+
+.start-lead {
+  text-align: center;
+
+  @include text-style(body-18);
+}
+
+.start-options {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: $spacing-4;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  @media (min-width: $_wide-from) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  @media (min-width: $_two-columns-from) {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  > li {
+    display: flex;
+  }
+}
+
+.start-card {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: $spacing-2;
+}
+
+.start-card-description {
+  flex: 1;
+
+  @include text-style(body-14-muted);
+}
+
+.start-card-action {
+  margin-top: $spacing-4;
+}
+
+// The survey list, the selected survey's form and the tabs. Every column
+// starts at the same height: the list's heading row, the form's card and the
+// tab strip.
+.editor-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: $spacing-8;
+  align-items: start;
+  // Contains the z-indexes inside (the focused tab uses one), so nothing in
+  // the page slides over the sticky header.
+  isolation: isolate;
+
+  @media (min-width: $_two-columns-from) {
+    grid-template-columns: $_nav-width-narrow minmax(0, 1fr);
+    column-gap: $spacing-6;
+  }
+
+  @media (min-width: $_three-columns-from) {
+    grid-template-columns: $_nav-width minmax(0, 1fr) minmax(
+        0,
+        $_side-max-width
+      );
+  }
+}
+
+.editor-side {
+  @media (min-width: $_three-columns-from) {
+    @include _sticky-column;
+  }
+}
+
+// The library's tab panel is the side's card. Its content sits in a body of
+// our own that carries the page's card padding (room for focus rings too) and,
+// beside the form, the scrolling, so the tab strip stays in view. The panel
+// itself never scrolls: its focus ring is a pseudo-element drawn just outside
+// its edges, which a scroll box would count as horizontal overflow.
+.editor .side-panel {
+  padding: 0;
+}
+
+.side-panel-body {
+  padding: $spacing-6;
+
+  @media (min-width: $_three-columns-from) {
+    max-height: calc(100vh - #{$_side-body-inset});
+    overflow-y: auto;
+  }
+}
+
+.problems-summary {
+  margin-bottom: $spacing-4;
+
+  @include text-style(body-16-bold);
+}
+
+// Beside the form, the pane stays in view: its heading, search and filters
+// hold still and only the list of rows scrolls. When the open filters leave
+// the list less than two rows, the whole pane scrolls instead, so nothing in
+// it is ever out of reach.
+.survey-nav {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-6;
+
+  @media (min-width: $_two-columns-from) {
+    @include _sticky-column;
+
+    margin: -$_ring-room;
+    padding: $_ring-room;
+    overflow-y: auto;
+
+    // Beside both the form and the tabs below it.
+    grid-row: span 2;
+  }
+
+  @media (min-width: $_three-columns-from) {
+    grid-row: auto;
+  }
+}
+
+.surveys-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: $spacing-3;
+  align-items: center;
+
+  h2 {
+    margin: 0;
+  }
+}
+
+.surveys-add {
+  margin-left: auto;
+}
+
+.survey-count {
+  display: flex;
+  flex-wrap: wrap;
+  gap: $spacing-1 $spacing-3;
+  align-items: center;
+  justify-content: space-between;
+
+  @include text-style(body-14-muted);
+}
+
+.survey-rows {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-1;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  @media (min-width: $_two-columns-from) {
+    flex: 1 1 auto;
+    min-height: $_rows-min-height;
+    margin: -$_ring-room;
+    padding: $_ring-room;
+    overflow-y: auto;
+  }
+}
+
+// The selected survey when it does not match: set apart after the matches,
+// its caption aligned with the row's text.
+.survey-rows-pinned {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-1;
+
+  &:not(:first-child) {
+    margin-top: $spacing-3;
+  }
+}
+
+.survey-row-caption {
+  padding-left: calc(#{$_row-rule-width} + #{$_row-padding-x});
+
+  @include text-style(body-12-muted);
+}
+
+// On the grey page a row is bare; the selected one turns white like the
+// form's card beside it, marked by a purple rule on its leading edge.
+.survey-row {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-1;
+  width: 100%;
+  padding: $spacing-2 $_row-padding-x;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  background-color: transparent;
+  border: 0;
+  border-left: $_row-rule-width solid transparent;
+  border-radius: 0 $border-radius $border-radius 0;
+  transition: background-color $transition-fast;
+
+  &:hover {
+    background-color: $neutral-gray-100;
+  }
+
+  &[aria-current="true"] {
+    background-color: $neutral-white;
+    border-left-color: $brand-purple-500;
+  }
+
+  &:focus-visible {
+    outline: $focus-ring-width solid $focus-outline-color;
+    outline-offset: $focus-ring-offset;
+  }
+}
+
+.survey-row-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 $spacing-2;
+  align-items: baseline;
+  min-width: 0;
+}
+
+.survey-row-number {
+  @include text-style(body-12-muted);
+}
+
+.survey-row-id {
+  overflow-wrap: anywhere;
+
+  @include text-style(body-14-bold);
+}
+
+.survey-row-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  @include text-style(body-14);
+}
+
+// "No id yet" and "No title yet"; after the title's style, which it overrides.
+.survey-row-unset {
+  @include text-style(body-14-muted);
+}
+
+.survey-row-states {
+  @include text-style(body-12-muted);
+}
+
+// As in the status strip's reason: the one state that blocks a download.
+.survey-row-errors {
+  color: $semantic-red-700;
+  font-weight: $font-weight-semibold;
+}
+
+.form-paused {
+  margin-bottom: $spacing-6;
+}
+
+.empty-state {
+  color: $text-color-body-muted;
+}
+
+.survey {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-8;
+  padding: $spacing-6;
+  background-color: $neutral-white;
+  border: $border-width solid $neutral-gray-100;
+  // The tab panel's corner, so the two columns' surfaces match.
+  border-radius: $tab-panel-radius;
+  scroll-margin-top: calc(var(--editor-header-height) + #{$spacing-4});
+
+  &:focus-visible {
+    outline: $focus-ring-width solid $focus-outline-color;
+    outline-offset: $focus-ring-offset;
+  }
+}
+
+.survey-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: $spacing-3 $spacing-6;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.survey-title {
+  display: flex;
+  flex-wrap: wrap;
+  gap: $spacing-2;
+  align-items: center;
+
+  h2 {
+    margin: 0 $spacing-1 0 0;
+
+    @include text-style(h4);
+  }
+}
+
+.survey-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: $spacing-2 $spacing-5;
+}
+
+.form-section {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-5;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+
+  // Floated so the legend takes part in the fieldset's flex layout.
+  > legend {
+    display: flex;
+    flex-direction: column;
+    gap: $spacing-1;
+    float: left;
+    width: 100%;
+    padding: 0;
+  }
+}
+
+.form-section-heading {
+  display: flex;
+  gap: $spacing-1;
+  align-items: center;
+
+  @include text-style(h5);
+}
+
+.form-section-description,
+.paragraphs-hint {
+  @include text-style(body-14-muted);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-2;
+  min-width: 0;
+  scroll-margin-top: calc(var(--editor-header-height) + #{$spacing-8});
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: $spacing-5 $spacing-4;
+  align-items: start;
+}
+
+@media (min-width: $_wide-from) {
+  .field-grid-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .field-grid-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.field-follow-up {
+  margin-top: $spacing-2;
+}
+
+.field-help,
+.group-help {
+  @include text-style(body-14-muted);
+}
+
+.field-warning {
+  display: block;
+  margin-top: $spacing-1;
+  color: $secondary-yellow-700;
+  font-weight: $font-weight-semibold;
+}
+
+.field-list {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-3;
+  align-items: flex-start;
+  margin-top: $spacing-2;
+
+  > * {
+    max-width: 100%;
+  }
+}
+
+.field-list-item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: $spacing-2 $spacing-3;
+  align-items: flex-end;
+  width: 100%;
+
+  > :first-child {
+    flex: 1 1 16rem;
+  }
+}
+
+.paragraphs {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-4;
+  align-items: flex-start;
+}
+
+.paragraph {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-3;
+  width: 100%;
+  padding: $spacing-4;
+  border: $border-width solid $neutral-gray-100;
+  border-radius: $border-radius;
+  scroll-margin-top: calc(var(--editor-header-height) + #{$spacing-8});
+}
+
+.paragraph-header {
+  display: flex;
+  gap: $spacing-3;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.paragraph-title {
+  @include text-style(body-16-bold);
+}
+
+.rendered {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-1;
+  padding: $spacing-2 $spacing-3;
+  background-color: $neutral-gray-50;
+  border-left: $border-width * 2 solid $brand-purple-500;
+  border-radius: $border-radius-sm;
+
+  @include text-style(body-14);
+}
+
+.rendered-label {
+  @include text-style(body-12-muted);
+}
+
+.issue-groups {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-6;
+}
+
+.issue-group {
+  padding-left: $spacing-3;
+  border-left: $border-width * 2 solid $semantic-red-500;
+
+  &[data-tone="warning"] {
+    border-left-color: $secondary-yellow-700;
+  }
+
+  .group-help {
+    margin-bottom: $spacing-3;
+  }
+}
+
+.issue-list {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-3;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.issue {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: $spacing-1;
+}
+
+.issue-location {
+  @include text-style(body-14-bold);
+}
+
+.issue-message {
+  @include text-style(body-14);
+}
+
+.raw-json textarea {
+  min-height: 28rem;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: $font-size-sm;
+  white-space: pre;
+}
+
+.changes {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-5;
+}
+
+.value {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.value-unset {
+  font-style: italic;
+  color: $text-color-body-muted;
+}
+
+.publish {
+  h3 {
+    margin-top: $spacing-6;
+  }
+}
+
+.steps {
+  margin: 0;
+  padding-left: $spacing-5;
+
+  > li + li {
+    margin-top: $spacing-3;
+  }
+}
+
+.preview {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-6;
+}
+
+// Both fields carry a description, so their labels and inputs line up.
+.preview-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: $spacing-5 $spacing-4;
+  align-items: start;
+
+  @media (min-width: $_wide-from) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.preview-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: $spacing-3;
+}
+
+// The popup is a fixed overlay, so its host needs no room in the column.
+.preview-host {
+  position: absolute;
+}
+
+.preview-outcome:not(:empty) {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-2;
+  padding: $spacing-3;
+  background-color: $neutral-gray-50;
+  border-radius: $border-radius;
+
+  @include text-style(body-14);
+}
+
+.preview-log {
+  @include text-style(body-14);
+
+  h3 {
+    @include text-style(body-16-bold);
+  }
+}
+
+.log-time {
+  color: $text-color-body-muted;
+}

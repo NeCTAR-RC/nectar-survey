@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en-AU">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex" />
+    <title>Survey popup config</title>
+    <!-- The real popup, loaded the way host services load it, for the
+         Preview tab. It sits next to this page in the container, so the
+         editor build leaves the tag alone (vite-ignore, removed from the
+         output) instead of bundling it. -->
+    <script type="module" vite-ignore src="./nectar-survey.js"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./main.tsx"></script>
+  </body>
+</html>
