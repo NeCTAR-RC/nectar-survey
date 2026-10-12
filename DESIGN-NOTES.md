@@ -5,7 +5,7 @@ The popup follows the "Nectar Survey Popup Options" mockup, modal variant 2a, bu
 ## Popup
 
 - Eyebrow: `body-12-bold`, Purple-500 capitals with 0.05em letter spacing (the library's capitalised-label treatment), 4px above the title. It is left out of the dialog's accessible name and read as part of its description.
-- Actions: "Start survey" is the primary navigation-tone link with the external-link icon; "Not right now" is a link-style button without a chevron; "Don't show me this again" sits on its own line 16px below them, in the actions area so it never scrolls away.
+- Actions: "Start survey" is the primary link (the design system's yellow call to action) with the external-link icon; "Not right now" is a link-style button without a chevron; "Don't show me this again" sits on its own line 16px below them, in the actions area so it never scrolls away.
 - Body links use the `body-16-link` style: Purple-500 bold, underlined, Purple-700 on hover.
 - Focus lands on "Start survey" when the popup opens. Escape, the close button and a click outside all count as "Not right now".
 - The overlay sits above host chrome such as Bootstrap 3 fixed navbars and modals.

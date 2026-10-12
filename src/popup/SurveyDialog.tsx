@@ -104,7 +104,6 @@ export function SurveyDialog({
           <>
             <Link
               variant="primary"
-              tone="navigation"
               iconAfter="arrow-up-right-from-square"
               href={url}
               target="_blank"
