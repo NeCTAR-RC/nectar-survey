@@ -1,7 +1,8 @@
 /**
  * What the preview shows: the config it mounts, the popup's verdict on each
- * survey worked out with the popup's own rules, and a body paragraph exactly
- * as the popup renders it.
+ * survey worked out with the popup's own rules, a body paragraph exactly as
+ * the popup renders it, and the link that opens a service page in preview
+ * mode.
  */
 
 import {
@@ -19,6 +20,7 @@ import {
   type Draft,
   type DraftSurvey,
   type JsonValue,
+  type KNOWN_SERVICES,
 } from "./draft.ts";
 import { toConfigObject } from "./json.ts";
 import { isUsableUrl } from "./validate.ts";
@@ -40,6 +42,7 @@ export interface PreviewOutcome {
 
 const SKIP_REASONS: Record<SkipReason, string> = {
   archived: "archived",
+  preview: "preview only, shown on pages opened with ?nectar-survey=preview",
   draft: "a draft, not live",
   closed: "not open on this date",
   service: "not for this service",
@@ -89,7 +92,9 @@ export function previewOutcome(
  * The config the preview mounts. With `asIfLive`, every survey that is not
  * archived is live and one without a usable shared link gets a sample one,
  * so a draft can be previewed before the real links exist; per-service links
- * are kept, and archived surveys stay out of play as they are for users.
+ * are kept, and archived surveys stay out of play as they are for users. The
+ * editor page is not in preview mode, so a preview survey shows here only
+ * when it is treated as live.
  */
 export function previewConfig(
   draft: Draft,
@@ -108,3 +113,42 @@ export function previewConfig(
 
 /** Link the preview uses for surveys that have none yet. */
 export const SAMPLE_SURVEY_URL = "https://example.org/sample-survey";
+
+/**
+ * The home page of each known service, the page "Try it on a service" opens
+ * unless another address is given.
+ */
+export const SERVICE_PAGES: Record<(typeof KNOWN_SERVICES)[number], string> = {
+  "Nectar Dashboard": "https://dashboard.rc.nectar.org.au/dashboard_home/",
+  "ARDC Jupyter Notebook Service":
+    "https://jupyterhub.rc.nectar.org.au/hub/home",
+  "ARDC BinderHub Service": "https://binderhub.rc.nectar.org.au/",
+  "ARDC Virtual Desktop Service": "https://desktop.rc.nectar.org.au/",
+};
+
+/** The query parameters of preview mode, as the popup reads them. */
+const PREVIEW_PARAM = "nectar-survey";
+const PREVIEW_NOW_PARAM = "nectar-survey-now";
+
+/**
+ * `address` with `nectar-survey=preview` added to its query, and with
+ * `nectar-survey-now=<now>` too when `now` ("YYYY-MM-DDTHH:mm") is not empty.
+ * The rest of the query and the fragment stay exactly as they were; preview
+ * parameters already in the address are replaced, so a generated link can be
+ * pasted back in. Undefined when `address` is not an http(s) address.
+ */
+export function previewLink(address: string, now: string): string | undefined {
+  if (!isUsableUrl(address)) return undefined;
+  const url = new URL(address.trim());
+  const kept = url.search
+    .slice(1)
+    .split("&")
+    .filter((pair) => {
+      const key = pair.split("=", 1)[0];
+      return pair !== "" && key !== PREVIEW_PARAM && key !== PREVIEW_NOW_PARAM;
+    });
+  const added = [`${PREVIEW_PARAM}=preview`];
+  if (now !== "") added.push(`${PREVIEW_NOW_PARAM}=${now}`);
+  url.search = [...kept, ...added].join("&");
+  return url.href;
+}

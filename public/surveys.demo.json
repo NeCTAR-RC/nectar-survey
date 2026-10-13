@@ -25,6 +25,24 @@
       "startLabel": "Start survey",
       "laterLabel": "Not right now",
       "dismissLabel": "Don't show me this again"
+    },
+    {
+      "id": "nectar-2026-preview",
+      "status": "preview",
+      "opens": "2026-10-13T00:00",
+      "closes": "2026-11-14T23:59",
+      "timezone": "Australia/Melbourne",
+      "services": [
+        "Nectar Dashboard",
+        "ARDC Jupyter Notebook Service",
+        "ARDC BinderHub Service",
+        "ARDC Virtual Desktop Service"
+      ],
+      "title": "Try the next {service} survey",
+      "body": [
+        "This survey is under test. It shows only on pages opened with <strong>?nectar-survey=preview</strong>."
+      ],
+      "url": "https://example.com/nectar-survey-preview"
     }
   ]
 }

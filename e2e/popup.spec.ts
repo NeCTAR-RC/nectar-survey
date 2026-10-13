@@ -3,8 +3,9 @@ import { expect, test, type Page } from "@playwright/test";
 /*
  * Behaviour of the popup on the built demo page, which reads
  * `surveys.demo.json` (survey `nectar-2026`, open 13 October to 14 November
- * 2026 in Australia/Melbourne) and takes the date from `?now=`. Every test
- * gets a fresh browser context, so saved state starts empty.
+ * 2026 in Australia/Melbourne, then the preview survey `nectar-2026-preview`
+ * with the same dates) and takes the date from `?now=`. Every test gets a
+ * fresh browser context, so saved state starts empty.
  */
 
 test.use({ timezoneId: "Australia/Melbourne" });
@@ -517,6 +518,143 @@ test.describe("events", () => {
     expect(await recordedEvents(page)).toEqual([
       { type: "nectar-survey:open", surveyId: SURVEY_ID },
       { type: "nectar-survey:dismiss", surveyId: SURVEY_ID },
+    ]);
+  });
+});
+
+test.describe("preview mode", () => {
+  const PREVIEW_ID = "nectar-2026-preview";
+  const PREVIEW_TITLE = "Try the next Nectar Dashboard survey";
+  // After both demo surveys close, so only a pretend time can show them.
+  const LATER_CLOCK = new Date("2027-01-01T10:00:00+11:00");
+
+  /** The open preview survey dialog. */
+  function previewDialog(page: Page) {
+    return page.getByRole("dialog", { name: PREVIEW_TITLE });
+  }
+
+  /** Opens the demo with `query` (without the leading "?") and waits. */
+  async function open(page: Page, query: string): Promise<void> {
+    await page.goto(`/?${query}`);
+    await settled(page);
+  }
+
+  /** Collects the popup's console debug lines. */
+  function watchDebug(page: Page): string[] {
+    const lines: string[] = [];
+    page.on("console", (message) => {
+      if (
+        message.type() === "debug" &&
+        message.text().startsWith("nectar-survey:")
+      ) {
+        lines.push(message.text());
+      }
+    });
+    return lines;
+  }
+
+  test("shows a preview survey before the live one", async ({ page }) => {
+    const debug = watchDebug(page);
+    await open(page, `now=${TODAY}&nectar-survey=preview`);
+    const dialog = previewDialog(page);
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toHaveAccessibleName(PREVIEW_TITLE);
+    expect(debug).toContain("nectar-survey: preview mode on");
+  });
+
+  test("never stores state for a preview survey", async ({ page }) => {
+    await open(page, `now=${TODAY}&nectar-survey=preview`);
+    await previewDialog(page).getByText("Don't show me this again").click();
+    await previewDialog(page)
+      .getByRole("button", { name: "Not right now" })
+      .click();
+    await expectNoDialog(page);
+    const keys = await page.evaluate(() => Object.keys(localStorage));
+    expect(keys).not.toContain(`nectar-survey:${PREVIEW_ID}`);
+
+    // Nothing stored, so it shows again on the next page load.
+    await page.reload();
+    await settled(page);
+    await expect(previewDialog(page)).toBeVisible();
+  });
+
+  test("shows nothing without the query and logs the preview reason", async ({
+    page,
+  }) => {
+    await page.route("**/surveys.demo.json", async (route) => {
+      const response = await route.fetch();
+      const config = await response.json();
+      config.surveys = config.surveys.filter(
+        (survey: { status?: string }) => survey.status === "preview",
+      );
+      await route.fulfill({ response, json: config });
+    });
+    const debug = watchDebug(page);
+    await visit(page);
+    await expectNoDialog(page);
+    expect(debug).toEqual([
+      `nectar-survey: no survey to show (${PREVIEW_ID} preview)`,
+    ]);
+  });
+
+  test("lasts for one page load only", async ({ page }) => {
+    await open(page, `now=${TODAY}&nectar-survey=preview`);
+    await expect(previewDialog(page)).toBeVisible();
+
+    // The next page load without the parameter is an ordinary one again.
+    await visit(page);
+    await expect(surveyDialog(page)).toBeVisible();
+    await expect(previewDialog(page)).toHaveCount(0);
+    const sessionKeys = await page.evaluate(() => Object.keys(sessionStorage));
+    expect(
+      sessionKeys.filter((key) => key.startsWith("nectar-survey")),
+    ).toEqual([]);
+  });
+
+  test("nectar-survey-now counts only beside nectar-survey=preview", async ({
+    page,
+  }) => {
+    await page.clock.setFixedTime(LATER_CLOCK);
+    const debug = watchDebug(page);
+
+    // An empty ?now= removes the demo's now attribute: the clock decides.
+    await open(page, "now=&nectar-survey-now=2026-10-20T10:00");
+    await expectNoDialog(page);
+    expect(debug.at(-1)).toBe(
+      `nectar-survey: no survey to show (${SURVEY_ID} closed, ${PREVIEW_ID} preview)`,
+    );
+
+    await open(
+      page,
+      "now=&nectar-survey=preview&nectar-survey-now=2026-10-20T10:00",
+    );
+    await expect(previewDialog(page)).toBeVisible();
+    expect(debug).toContain(
+      "nectar-survey: preview mode on, pretending it is 2026-10-20T10:00",
+    );
+
+    // An absent or empty value means the clock.
+    await open(page, "now=&nectar-survey=preview");
+    await expectNoDialog(page);
+    await open(page, "now=&nectar-survey=preview&nectar-survey-now=");
+    await expectNoDialog(page);
+
+    // The now attribute comes first.
+    await open(
+      page,
+      `now=${AFTER_CLOSE}&nectar-survey=preview&nectar-survey-now=2026-10-20T10:00`,
+    );
+    await expectNoDialog(page);
+  });
+
+  test("an invalid nectar-survey-now shows nothing and warns once", async ({
+    page,
+  }) => {
+    const warnings = watchWarnings(page);
+    await open(page, "now=&nectar-survey=preview&nectar-survey-now=soon");
+    await expectNoDialog(page);
+    expect(warnings).toEqual([
+      'nectar-survey: invalid nectar-survey-now value "soon"',
     ]);
   });
 });

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { parseConfig, type Survey } from "./config.ts";
 import { selectSurvey, skipReason, type RuleContext } from "./rules.ts";
 import type { SurveyState } from "./storage.ts";
@@ -33,6 +33,7 @@ function context(
   return {
     service: "Nectar Dashboard",
     now: NOW,
+    preview: false,
     readState: (id) => states[id] ?? {},
     ...overrides,
   };
@@ -188,6 +189,70 @@ describe("skipReason", () => {
   });
 });
 
+describe("skipReason for preview surveys", () => {
+  const underTest = survey({ status: "preview" });
+  const inPreview = (
+    states: Record<string, SurveyState> = {},
+    overrides: Partial<RuleContext> = {},
+  ) => context(states, { preview: true, ...overrides });
+
+  it("is preview outside preview mode, before the dates and the rest", () => {
+    expect(skipReason(underTest, context())).toBe("preview");
+    expect(
+      skipReason(
+        survey({ status: "preview", services: [], url: undefined }),
+        context({}, { now: AFTER_CLOSING }),
+      ),
+    ).toBe("preview");
+  });
+
+  it("is archived, not preview, once archived", () => {
+    expect(skipReason(survey({ status: "archived" }), inPreview())).toBe(
+      "archived",
+    );
+  });
+
+  it("shows in preview mode", () => {
+    expect(skipReason(underTest, inPreview())).toBeUndefined();
+  });
+
+  it("still obeys the dates, the service and the url in preview mode", () => {
+    expect(skipReason(underTest, inPreview({}, { now: AFTER_CLOSING }))).toBe(
+      "closed",
+    );
+    expect(
+      skipReason(
+        underTest,
+        inPreview({}, { service: "ARDC BinderHub Service" }),
+      ),
+    ).toBe("service");
+    expect(
+      skipReason(survey({ status: "preview", url: undefined }), inPreview()),
+    ).toBe("no-url");
+  });
+
+  it("never reads its stored state in preview mode", () => {
+    const readState = vi.fn(() => ({
+      dismissed: true,
+      clicked: true,
+      shownOn: TODAY,
+    }));
+    expect(skipReason(underTest, inPreview({}, { readState }))).toBeUndefined();
+    expect(readState).not.toHaveBeenCalled();
+  });
+
+  it("leaves draft and live surveys as they are in preview mode", () => {
+    expect(skipReason(survey({ status: "draft" }), inPreview())).toBe("draft");
+    expect(skipReason(survey(), inPreview())).toBeUndefined();
+    expect(skipReason(survey(), inPreview({ s: { dismissed: true } }))).toBe(
+      "dismissed",
+    );
+    expect(skipReason(survey(), inPreview({ s: { shownOn: TODAY } }))).toBe(
+      "shown-today",
+    );
+  });
+});
+
 describe("selectSurvey", () => {
   it("returns undefined for an empty list", () => {
     expect(selectSurvey([], context())).toBeUndefined();
@@ -210,6 +275,34 @@ describe("selectSurvey", () => {
         context({ clicked: { clicked: true } }),
       ),
     ).toBe(other);
+  });
+
+  it("tries preview surveys first in preview mode, each group in config order", () => {
+    const live = survey({ id: "live" });
+    const firstUnderTest = survey({ id: "first-preview", status: "preview" });
+    const secondUnderTest = survey({ id: "second-preview", status: "preview" });
+    expect(
+      selectSurvey(
+        [live, firstUnderTest, secondUnderTest],
+        context({}, { preview: true }),
+      ),
+    ).toBe(firstUnderTest);
+    expect(
+      selectSurvey(
+        [
+          live,
+          survey({ id: "linkless-preview", status: "preview", url: undefined }),
+        ],
+        context({}, { preview: true }),
+      ),
+    ).toBe(live);
+  });
+
+  it("picks live surveys as before outside preview mode", () => {
+    const live = survey({ id: "live" });
+    const underTest = survey({ id: "preview", status: "preview" });
+    expect(selectSurvey([underTest, live], context())).toBe(live);
+    expect(selectSurvey([underTest], context())).toBeUndefined();
   });
 
   it("returns undefined when every survey is skipped", () => {

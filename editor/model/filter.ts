@@ -31,7 +31,8 @@ export const DEFAULT_FILTER: SurveyFilter = { search: "" };
 
 /**
  * The groups set by the "Would show now" preset: the surveys the popup would
- * show at this moment, open now and live.
+ * show at this moment, open now and live. Preview surveys are left out:
+ * users never see them.
  */
 export const SHOWING_NOW: Pick<SurveyFilter, "dates" | "status"> = {
   dates: "open",

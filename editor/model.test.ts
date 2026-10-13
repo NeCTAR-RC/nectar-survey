@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CalendarDateTime } from "@internationalized/date";
 import exampleJson from "../public/surveys.example.json?raw";
-import { parseConfig } from "../src/config/config.ts";
+import { parseConfig, SURVEY_STATUSES } from "../src/config/config.ts";
 import {
   ALL_SERVICES_OPTION,
   applyServiceSelection,
@@ -29,6 +29,7 @@ import {
   minuteText,
   newSurvey,
   previewConfig,
+  previewLink,
   previewOutcome,
   SAMPLE_SURVEY_URL,
   saveDraft,
@@ -125,7 +126,7 @@ describe("survey status", () => {
   });
 
   it("reads a missing or unknown status as not chosen, and says so", () => {
-    for (const status of [undefined, "preview", true]) {
+    for (const status of [undefined, "published", true]) {
       const text = JSON.stringify({
         surveys: [{ ...toSurveyObject(survey()), status }],
       });
@@ -971,6 +972,14 @@ describe("the Would show now preset", () => {
     expect(SHOWING_NOW).toEqual({ dates: "open", status: "live" });
   });
 
+  it("leaves out an open preview survey", () => {
+    const filter: SurveyFilter = { search: "", ...SHOWING_NOW };
+    expect(matchesFilter(survey(), "open", filter)).toBe(true);
+    expect(matchesFilter(survey({ status: "preview" }), "open", filter)).toBe(
+      false,
+    );
+  });
+
   it("is on exactly while both groups hold the preset", () => {
     expect(isShowingNow({ search: "x", ...SHOWING_NOW })).toBe(true);
     expect(
@@ -1027,7 +1036,7 @@ describe("survey filter", () => {
   it("counts any change from the default, or search text, as filtering", () => {
     expect(isFilterActive({ ...DEFAULT_FILTER, search: "nectar" })).toBe(true);
     expect(isFilterActive({ ...DEFAULT_FILTER, dates: "open" })).toBe(true);
-    for (const status of ["draft", "live", "archived"] as const) {
+    for (const status of SURVEY_STATUSES) {
       expect(isFilterActive({ ...DEFAULT_FILTER, status })).toBe(true);
     }
     expect(
@@ -1069,10 +1078,11 @@ describe("survey filter", () => {
   it("matches a Status choice on the survey's status only", () => {
     const byStatus = {
       draft: survey({ status: "draft" }),
+      preview: survey({ status: "preview" }),
       live: survey({ status: "live" }),
       archived: survey({ status: "archived" }),
     };
-    for (const chosen of ["draft", "live", "archived"] as const) {
+    for (const chosen of SURVEY_STATUSES) {
       for (const [status, target] of Object.entries(byStatus)) {
         expect(
           matchesFilter(target, "open", { search: "", status: chosen }),
@@ -1338,6 +1348,7 @@ describe("preview", () => {
       previewOutcome(config, {
         service: "Nectar Dashboard",
         now: NOW,
+        preview: false,
         readState: () => ({}),
       }),
     ).toEqual({
@@ -1367,6 +1378,7 @@ describe("preview", () => {
       previewOutcome(config, {
         service: "Nectar Dashboard",
         now: NOW,
+        preview: false,
         readState: () => ({}),
       }),
     ).toEqual({
@@ -1377,6 +1389,148 @@ describe("preview", () => {
         { id: "second", reason: "another survey is shown first" },
       ],
     });
+  });
+});
+
+describe("preview surveys", () => {
+  it("round-trips the preview status through the file", () => {
+    const text = toJson(draftOf(survey({ status: "preview" })));
+    expect(text).toMatch(/"id": "nectar-2026",\n\s+"status": "preview",/);
+    expect(read(text).surveys[0].status).toBe("preview");
+  });
+
+  it("warns when a preview survey is open now", () => {
+    const open = validate(draftOf(survey({ status: "preview" })), NOW);
+    expect(open.warnings).toEqual([
+      {
+        surveyIndex: 0,
+        field: "status",
+        message:
+          "This survey is open now but still preview only, so only pages opened with ?nectar-survey=preview show it. Set its status to Live to publish it.",
+      },
+    ]);
+    const later = validate(
+      draftOf(survey({ status: "preview", opens: "2026-11-01T00:00" })),
+      NOW,
+    );
+    expect(fields(later.warnings)).not.toContain("status");
+    const live = validate(draftOf(survey()), NOW);
+    expect(fields(live.warnings)).not.toContain("status");
+  });
+
+  it("warns when a preview survey has no link", () => {
+    const warnings = validate(
+      draftOf(survey({ status: "preview", url: "" })),
+      NOW,
+    ).warnings;
+    expect(warnings).toContainEqual({
+      surveyIndex: 0,
+      field: "url",
+      message:
+        "This survey is in preview but has no survey link, so the popup does not show it anywhere.",
+    });
+  });
+
+  it("does not count a preview survey in overlap warnings", () => {
+    const draft = draftOf(
+      survey({ status: "preview" }),
+      survey({ key: "b", id: "other" }),
+    );
+    expect(fields(validate(draft, NOW).warnings)).toEqual(["status"]);
+  });
+
+  it("shows turning preview to live as a changed field", () => {
+    const live = draftOf(survey({ status: "preview" }));
+    const draft = draftOf(survey({ liveId: "nectar-2026" }));
+    expect(diff(live, draft).changes).toEqual([
+      {
+        surveyId: "nectar-2026",
+        field: "status",
+        from: "preview",
+        to: "live",
+      },
+    ]);
+  });
+
+  it("is listed by the Preview status filter only", () => {
+    const filter: SurveyFilter = { search: "", status: "preview" };
+    expect(matchesFilter(survey({ status: "preview" }), "open", filter)).toBe(
+      true,
+    );
+    for (const status of ["draft", "live", "archived"] as const) {
+      expect(matchesFilter(survey({ status }), "open", filter)).toBe(false);
+    }
+    expect(
+      matchesFilter(survey({ status: "preview" }), "open", DEFAULT_FILTER),
+    ).toBe(true);
+  });
+
+  it("is turned live in the preview when asked, and skipped otherwise", () => {
+    const draft = draftOf(survey({ status: "preview" }));
+    const context = {
+      service: "Nectar Dashboard",
+      now: NOW,
+      preview: false,
+      readState: () => ({}),
+    };
+    expect(previewConfig(draft, true).surveys).toMatchObject([
+      { status: "live" },
+    ]);
+    expect(previewOutcome(previewConfig(draft, true), context)).toEqual({
+      shownId: "nectar-2026",
+      skipped: [],
+    });
+    expect(previewOutcome(previewConfig(draft, false), context)).toEqual({
+      skipped: [
+        {
+          id: "nectar-2026",
+          reason:
+            "preview only, shown on pages opened with ?nectar-survey=preview",
+        },
+      ],
+    });
+  });
+});
+
+describe("previewLink", () => {
+  it("adds the preview parameter, and the time when one is set", () => {
+    expect(previewLink("https://desktop.rc.nectar.org.au/", "")).toBe(
+      "https://desktop.rc.nectar.org.au/?nectar-survey=preview",
+    );
+    expect(
+      previewLink("https://desktop.rc.nectar.org.au/", "2026-10-19T09:00"),
+    ).toBe(
+      "https://desktop.rc.nectar.org.au/?nectar-survey=preview&nectar-survey-now=2026-10-19T09:00",
+    );
+  });
+
+  it("keeps an existing query and fragment as they were", () => {
+    expect(
+      previewLink(
+        "https://example.org/page?a=1&b=x%20y#top",
+        "2026-10-19T09:00",
+      ),
+    ).toBe(
+      "https://example.org/page?a=1&b=x%20y&nectar-survey=preview&nectar-survey-now=2026-10-19T09:00#top",
+    );
+    expect(previewLink("https://example.org/page#top", "")).toBe(
+      "https://example.org/page?nectar-survey=preview#top",
+    );
+  });
+
+  it("replaces preview parameters already in the address", () => {
+    expect(
+      previewLink(
+        "https://example.org/?nectar-survey=preview&a=1&nectar-survey-now=2026-01-01",
+        "",
+      ),
+    ).toBe("https://example.org/?a=1&nectar-survey=preview");
+  });
+
+  it("is undefined for an address that is not http(s)", () => {
+    expect(previewLink("", "")).toBeUndefined();
+    expect(previewLink("dashboard.rc.nectar.org.au", "")).toBeUndefined();
+    expect(previewLink("ftp://example.org/", "")).toBeUndefined();
   });
 });
 

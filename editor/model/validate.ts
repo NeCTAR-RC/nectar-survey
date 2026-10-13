@@ -245,7 +245,7 @@ function surveyWarnings(
     });
   }
 
-  if (parsed?.status === "live") {
+  if (parsed?.status === "live" || parsed?.status === "preview") {
     const missing = effectiveServices(survey, names).filter(
       (service) => resolveSurveyUrl(parsed, service) === undefined,
     );
@@ -255,8 +255,7 @@ function surveyWarnings(
     ) {
       issues.push({
         field: "url",
-        message:
-          "This survey is live but has no survey link, so the popup does not show it anywhere.",
+        message: `This survey is ${parsed.status === "live" ? "live" : "in preview"} but has no survey link, so the popup does not show it anywhere.`,
       });
     } else {
       for (const service of missing) {
@@ -266,6 +265,14 @@ function surveyWarnings(
         });
       }
     }
+  }
+
+  if (parsed?.status === "preview" && surveyTiming(parsed, now) === "open") {
+    issues.push({
+      field: "status",
+      message:
+        "This survey is open now but still preview only, so only pages opened with ?nectar-survey=preview show it. Set its status to Live to publish it.",
+    });
   }
 
   if (parsed) {
@@ -340,7 +347,9 @@ function surveyWarnings(
 /**
  * Warns about live surveys that run for the same service at the same
  * time. The popup shows the first one in the list; a later one only reaches
- * people who have already started or dismissed the earlier one. Surveys are
+ * people who have already started or dismissed the earlier one. Preview
+ * surveys are left out: users never see them, and in preview mode they go
+ * first and keep no saved state, so they hide nothing. Surveys are
  * named by id, which is unique here: a survey that repeats an earlier id has
  * an error, so it is never parsed and never reaches this check.
  */

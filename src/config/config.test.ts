@@ -108,18 +108,24 @@ describe("parseConfig", () => {
     const surveys = parseConfig({
       surveys: [
         rawSurvey({ id: "a", status: "draft" }),
-        rawSurvey({ id: "b", status: "live" }),
-        rawSurvey({ id: "c", status: "archived" }),
+        rawSurvey({ id: "b", status: "preview" }),
+        rawSurvey({ id: "c", status: "live" }),
+        rawSurvey({ id: "d", status: "archived" }),
       ],
     });
-    expect(surveys.map((s) => s.status)).toEqual(["draft", "live", "archived"]);
+    expect(surveys.map((s) => s.status)).toEqual([
+      "draft",
+      "preview",
+      "live",
+      "archived",
+    ]);
     expect(warn).not.toHaveBeenCalled();
   });
 
   it.each([
     ["missing", undefined],
     ["in capitals", "Live"],
-    ["unknown", "preview"],
+    ["unknown", "published"],
     ["a boolean", true],
   ])(
     "drops a survey whose status is %s, naming the reason",
@@ -130,7 +136,7 @@ describe("parseConfig", () => {
       expect(surveys.map((s) => s.id)).toEqual(["ok"]);
       expect(warn).toHaveBeenCalledTimes(1);
       expect(warn).toHaveBeenCalledWith(
-        'nectar-survey: survey "bad" skipped: status must be draft, live or archived',
+        'nectar-survey: survey "bad" skipped: status must be draft, preview, live or archived',
       );
     },
   );

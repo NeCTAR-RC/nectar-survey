@@ -37,6 +37,10 @@ export const STATUS_TEXT: Record<
   { label: string; help: string }
 > = {
   draft: { label: "Draft", help: "Not shown to anyone." },
+  preview: {
+    label: "Preview",
+    help: "Shown only on pages opened with ?nectar-survey=preview; turn it to Live to publish.",
+  },
   live: { label: "Live", help: "Shown to users while it is open." },
   archived: {
     label: "Archived",

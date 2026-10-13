@@ -568,7 +568,7 @@ test("a file in the older format waits for a person to choose a status", async (
   // the download off.
   const survey = surveyForm(page, "nectar-2026");
   const group = statusGroup(page, "nectar-2026");
-  await expect(group.getByRole("radio")).toHaveCount(3);
+  await expect(group.getByRole("radio")).toHaveCount(4);
   for (const radio of await group.getByRole("radio").all()) {
     await expect(radio).not.toBeChecked();
   }
@@ -770,4 +770,115 @@ test("the Load menu offers the same four routes", async ({ page }) => {
   }
   await menu.getByRole("menuitem", { name: "Pasted JSON" }).click();
   await expect(page.getByRole("dialog", { name: "Paste JSON" })).toBeVisible();
+});
+
+test("Preview status: the state, the filter, the warning and the file", async ({
+  page,
+}) => {
+  // Inside the template's survey dates, so the survey is open now.
+  await page.clock.setFixedTime(new Date("2026-10-20T10:00:00+11:00"));
+  await openTemplate(page);
+  const survey = surveyForm(page, "nectar-2026");
+  const warning = survey.getByText(/still preview only/);
+  await expect(warning).toHaveCount(0);
+
+  await chooseStatus(page, "nectar-2026", "Preview");
+  await expect(
+    survey.getByText(
+      "Shown only on pages opened with ?nectar-survey=preview; turn it to Live to publish.",
+    ),
+  ).toBeVisible();
+  await expect(row(page, "nectar-2026")).toContainText("Preview");
+
+  // Open now, but users do not see it yet.
+  await expect(warning).toBeVisible();
+
+  // The Preview chip lists it; Would show now leaves it out.
+  await openFilters(page);
+  await chip(page, "Preview").click();
+  await expect(countLine(page)).toHaveText("1 of 1 match");
+  await chip(page, "Would show now").click();
+  await expect(countLine(page)).toHaveText("0 of 1 match");
+  await nav(page).getByRole("button", { name: "Clear filters" }).click();
+
+  let [download] = await Promise.all([
+    page.waitForEvent("download"),
+    downloadButton(page).click(),
+  ]);
+  let json = JSON.parse(await readFile(await download.path(), "utf8"));
+  expect(json.surveys[0].status).toBe("preview");
+  expect(Object.keys(json.surveys[0]).slice(0, 2)).toEqual(["id", "status"]);
+
+  // Set to Live, it is published: no state word, no warning.
+  await chooseStatus(page, "nectar-2026", "Live");
+  await expect(row(page, "nectar-2026")).not.toContainText("Preview");
+  await expect(warning).toHaveCount(0);
+  [download] = await Promise.all([
+    page.waitForEvent("download"),
+    downloadButton(page).click(),
+  ]);
+  json = JSON.parse(await readFile(await download.path(), "utf8"));
+  expect(json.surveys[0].status).toBe("live");
+});
+
+test("Try it on a service gives the link to a service page in preview mode", async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await openTemplate(page);
+  await openTab(page, "Preview");
+  const block = page.getByRole("region", { name: "Try it on a service" });
+  await expect(
+    block.getByText(
+      "https://dashboard.rc.nectar.org.au/dashboard_home/?nectar-survey=preview",
+      { exact: true },
+    ),
+  ).toBeVisible();
+
+  const pageSelect = block.getByRole("button", { name: /Page/ });
+  await pageSelect.click();
+  await page.getByRole("option", { name: "ARDC BinderHub Service" }).click();
+  await expect(
+    block.getByText(
+      "https://binderhub.rc.nectar.org.au/?nectar-survey=preview",
+      {
+        exact: true,
+      },
+    ),
+  ).toBeVisible();
+
+  // The panel's "Pretend it is" adds the time.
+  const pretend = page.getByRole("group", { name: /^Pretend it is/ });
+  await pretend.getByRole("spinbutton", { name: "day" }).click();
+  await page.keyboard.type("19");
+  await page.keyboard.type("10");
+  await page.keyboard.type("2026");
+  await page.keyboard.type("9");
+  await page.keyboard.type("00");
+  await page.keyboard.type("a");
+  const timed =
+    "https://binderhub.rc.nectar.org.au/?nectar-survey=preview&nectar-survey-now=2026-10-19T09:00";
+  await expect(block.getByText(timed, { exact: true })).toBeVisible();
+
+  await block.getByRole("button", { name: "Copy link" }).click();
+  await expect(
+    page.getByText("Copied the link to the clipboard."),
+  ).toBeVisible();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(timed);
+
+  // Another address keeps its own query and fragment.
+  await pageSelect.click();
+  await page.getByRole("option", { name: "Another address" }).click();
+  const address = block.getByRole("textbox", { name: /^Page address/ });
+  await address.fill("dashboard-h");
+  await expect(block.getByText(/Enter a full web address/)).toBeVisible();
+  await expect(block.getByRole("button", { name: "Copy link" })).toHaveCount(0);
+  await address.fill("http://localhost:8080/project/?tab=overview#top");
+  await expect(
+    block.getByText(
+      "http://localhost:8080/project/?tab=overview&nectar-survey=preview&nectar-survey-now=2026-10-19T09:00#top",
+      { exact: true },
+    ),
+  ).toBeVisible();
 });

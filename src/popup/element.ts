@@ -3,6 +3,8 @@
  * attributes, fetches the survey config, applies the display rules and, when
  * a survey is due, loads the dialog chunk and mounts the dialog in its shadow
  * root. It also records the user's choice and announces it with an event.
+ * The page address can put a page load in preview mode (see
+ * `readPreviewMode`).
  * Nothing here throws into the host page: a fault someone should fix (bad
  * attribute, failed request, invalid config, a dialog chunk that does not
  * load, render error) is one `console.warn` line, a normal rule outcome one
@@ -15,7 +17,7 @@
 
 import { parseConfig, type Survey } from "../config/config.ts";
 import { calendarDay } from "../config/dates.ts";
-import { selectSurvey } from "../config/rules.ts";
+import { selectSurvey, skipReason, type RuleContext } from "../config/rules.ts";
 import {
   clearAllState,
   readState,
@@ -33,6 +35,17 @@ type SurveyEventName = "open" | "start" | "later" | "dismiss";
 
 const LOG_PREFIX = "nectar-survey:";
 const DEFAULT_CONFIG_FILE = "surveys.json";
+
+/** Query parameter that puts a page load in preview mode: `preview`. */
+const PREVIEW_PARAM = "nectar-survey";
+/** Query parameter for the time a page in preview mode pretends it is. */
+const PREVIEW_NOW_PARAM = "nectar-survey-now";
+
+/** This page load's preview mode and, in it, the time to pretend it is. */
+interface PreviewMode {
+  on: boolean;
+  now?: string;
+}
 
 /**
  * URL the default config is resolved against: the entry script itself
@@ -59,6 +72,21 @@ function debug(message: string): void {
   console.debug(`${LOG_PREFIX} ${message}`);
 }
 
+/**
+ * Reads this page's preview mode from its address alone; nothing is
+ * remembered, so every page load decides afresh. `?nectar-survey=preview`
+ * puts the page load in preview mode, and with it on the same address,
+ * `nectar-survey-now=<date or date and time>` sets the time to pretend it is.
+ * An empty or absent value means the real clock, and without preview mode
+ * the time is ignored.
+ */
+function readPreviewMode(search: string): PreviewMode {
+  const params = new URLSearchParams(search);
+  if (params.get(PREVIEW_PARAM) !== "preview") return { on: false };
+  const now = params.get(PREVIEW_NOW_PARAM);
+  return now ? { on: true, now } : { on: true };
+}
+
 /** Survey invitation popup. See README.md for attributes and events. */
 export class NectarSurvey extends HTMLElement {
   static readonly observedAttributes = ["now"];
@@ -81,6 +109,7 @@ export class NectarSurvey extends HTMLElement {
   private dialog: DialogModule.MountedDialog | undefined;
   private abort: AbortController | undefined;
   private connected = false;
+  private preview: PreviewMode = { on: false };
 
   constructor() {
     super();
@@ -89,6 +118,13 @@ export class NectarSurvey extends HTMLElement {
 
   connectedCallback(): void {
     this.connected = true;
+    this.preview = readPreviewMode(location.search);
+    if (this.preview.on) {
+      const time = this.preview.now
+        ? `, pretending it is ${this.preview.now}`
+        : "";
+      debug(`preview mode on${time}`);
+    }
     void this.refresh();
   }
 
@@ -128,12 +164,20 @@ export class NectarSurvey extends HTMLElement {
     this.unmount();
   }
 
-  /** Current time, or the `now` attribute when set; undefined if invalid. */
-  private currentTime(): Date | undefined {
-    const override = this.getAttribute("now");
-    if (override === null) return new Date();
-    const date = new Date(override);
-    return Number.isNaN(date.getTime()) ? undefined : date;
+  /**
+   * The time to pretend it is, and where it came from: the `now` attribute
+   * (demo and tests) first, then `nectar-survey-now` in preview mode.
+   * Undefined means the real clock.
+   */
+  private timeOverride(): { value: string; source: string } | undefined {
+    const attribute = this.getAttribute("now");
+    if (attribute !== null) {
+      return { value: attribute, source: "now attribute" };
+    }
+    if (this.preview.now !== undefined) {
+      return { value: this.preview.now, source: `${PREVIEW_NOW_PARAM} value` };
+    }
+    return undefined;
   }
 
   /**
@@ -153,9 +197,10 @@ export class NectarSurvey extends HTMLElement {
       warn("no service attribute, nothing to show");
       return;
     }
-    const now = this.currentTime();
-    if (!now) {
-      warn(`invalid now attribute "${this.getAttribute("now")}"`);
+    const override = this.timeOverride();
+    const now = override ? new Date(override.value) : new Date();
+    if (Number.isNaN(now.getTime())) {
+      warn(`invalid ${override?.source} "${override?.value}"`);
       return;
     }
 
@@ -170,9 +215,19 @@ export class NectarSurvey extends HTMLElement {
     const json: unknown = await response.json();
     if (signal.aborted) return;
 
-    const survey = selectSurvey(parseConfig(json), { service, now, readState });
+    const surveys = parseConfig(json);
+    const ctx: RuleContext = {
+      service,
+      now,
+      preview: this.preview.on,
+      readState,
+    };
+    const survey = selectSurvey(surveys, ctx);
     if (!survey) {
-      debug("no survey to show");
+      const reasons = surveys.map(
+        (entry) => `${entry.id} ${skipReason(entry, ctx)}`,
+      );
+      debug(`no survey to show (${reasons.join(", ") || "none listed"})`);
       return;
     }
     await this.show(survey, service, now, signal);
@@ -183,7 +238,8 @@ export class NectarSurvey extends HTMLElement {
    * today and announces it. The showing is recorded only once the dialog has
    * rendered, so a chunk that does not load or a dialog that fails to render
    * never uses up the day's showing. A refresh or disconnection while the
-   * chunk loads discards the result.
+   * chunk loads discards the result. A preview survey's showing and choices
+   * are announced but never stored (see `skipReason`).
    */
   private async show(
     survey: Survey,
@@ -200,8 +256,11 @@ export class NectarSurvey extends HTMLElement {
     }
     if (signal.aborted) return;
 
+    const store = (patch: Partial<SurveyState>) => {
+      if (survey.status !== "preview") writeState(survey.id, patch);
+    };
     const record = (name: SurveyEventName, patch: Partial<SurveyState>) => {
-      writeState(survey.id, patch);
+      store(patch);
       this.emit(name, survey.id);
     };
     const dialog = dialogModule.mountDialog(this.shadow, {
@@ -217,7 +276,7 @@ export class NectarSurvey extends HTMLElement {
 
     // Only now: a chunk that failed to load, or a dialog that failed to
     // render, must not use up the day's showing.
-    writeState(survey.id, { shownOn: calendarDay(now, survey.timezone) });
+    store({ shownOn: calendarDay(now, survey.timezone) });
     this.emit("open", survey.id);
   }
 

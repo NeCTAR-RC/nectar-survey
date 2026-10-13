@@ -823,3 +823,26 @@ pre {
 .log-time {
   color: $text-color-body-muted;
 }
+
+.service-link {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-4;
+
+  @include text-style(body-14);
+
+  h3 {
+    @include text-style(body-16-bold);
+  }
+}
+
+// A long link wraps inside the column rather than widening it.
+.service-link-result {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-2;
+
+  code {
+    overflow-wrap: anywhere;
+  }
+}

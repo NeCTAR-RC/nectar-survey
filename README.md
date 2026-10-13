@@ -31,7 +31,17 @@ Two things on the host page can get in the way. Check them once when adding the 
 - **`config-url`** (optional). Where to fetch the config from. When it is not set, the popup uses the address the script was loaded from and swaps the file name: a script at `https://example.org/nectar-survey.js` fetches `https://example.org/surveys.json`. Both files live in the same Swift container, so host services never set this. The demo page sets it to use its own demo config. A relative value is resolved against the page, like any link on the page.
 - **`now`** (optional, demo and tests only). A date or date and time in ISO format, for example `2026-10-20T10:00`, that the popup treats as the current time instead of the real one. Changing it makes the element check the rules again. An invalid value shows nothing. Never set it on a host service.
 
-The element fetches the config each time it is added to the page (with `cache: "no-cache"`: the browser keeps a copy but checks it with the server every time, so a changed file is used at once) and shows at most one survey. It checks the rules once, at that moment, and does not watch the clock: a survey that opens while a page is already open appears on the next page load, and a popup already open when its survey closes stays open. The element never throws into the host page. A fault someone should fix (a missing attribute, a failed request, invalid JSON, an invalid survey entry, a dialog file that does not load, a render error) is one `console.warn` line and nothing on screen. A normal outcome of the rules (no survey open today, already shown, dismissed) is one `console.debug` line, hidden unless the console's verbose level is on. It never logs at error level, so host page monitoring does not count the popup as a broken page.
+The element fetches the config each time it is added to the page (with `cache: "no-cache"`: the browser keeps a copy but checks it with the server every time, so a changed file is used at once) and shows at most one survey. It checks the rules once, at that moment, and does not watch the clock: a survey that opens while a page is already open appears on the next page load, and a popup already open when its survey closes stays open. The element never throws into the host page. A fault someone should fix (a missing attribute, a failed request, invalid JSON, an invalid survey entry, a dialog file that does not load, a render error) is one `console.warn` line and nothing on screen. A normal outcome of the rules (no survey open today, already shown, dismissed) is one `console.debug` line naming each survey and why it was skipped, for example `no survey to show (nectar-2026 closed)`, hidden unless the console's verbose level is on. It never logs at error level, so host page monitoring does not count the popup as a broken page.
+
+### Preview mode
+
+Preview mode shows a survey on a real service page before users see it, with no change to the host. It is decided by the page address alone and nothing is remembered, so it reaches only the person who opens such an address, for that one page load.
+
+- **`?nectar-survey=preview`** at the end of a host page's address puts that page load in preview mode. Surveys with `"status": "preview"` show there and nowhere else. The next page load without the parameter is an ordinary one again, so each page to check is opened with the parameter.
+- **`nectar-survey-now=<date or date and time>`** on the same address, for example `?nectar-survey=preview&nectar-survey-now=2026-10-19T09:00`, makes the popup pretend it is that time, in the format the `now` attribute takes. It counts only beside `nectar-survey=preview`; an empty or absent value means the real clock. A `now` attribute on the element comes first. An invalid value is one warning and nothing on screen, as for the attribute.
+- A preview survey still follows its dates, `services` and its links, so the tester sees what users will see once it is live. Two things differ. Its stored state is neither read nor written, so it shows on every page load, and the tester's browser holds nothing under its id once it goes live. And it is tried before the other surveys, so a survey under test shows even while a live survey is open.
+- Live surveys behave as always, in preview mode too: with a pretend time, a live survey still records its showing and the tester's choices under that pretend date. A tester who wants a clean browser afterwards runs `customElements.get("nectar-survey").resetState()` in that page's console, or clears the `nectar-survey:` keys from that service's `localStorage` in the browser's developer tools.
+- A page in preview mode logs one `console.debug` line saying so. Outside preview mode, a preview survey is listed as `preview` in the "no survey to show" line.
 
 ### Events
 
@@ -54,7 +64,7 @@ For the demo page and tests; host services do not need these.
 
 The popup is split in two so that a page with no survey to show costs almost nothing. Sizes are from the current build.
 
-- **Every page:** the entry script `nectar-survey.js` (about 7 kB, about 3 kB gzipped) checks the rules. It holds no React and no styles. The browser asks the server once for the script and once for `surveys.json`, and while neither has changed each answer is a short "not modified" with no body. When no survey is due, that is all: no React is downloaded or run.
+- **Every page:** the entry script `nectar-survey.js` (about 8 kB, about 3.5 kB gzipped) checks the rules. It holds no React and no styles. The browser asks the server once for the script and once for `surveys.json`, and while neither has changed each answer is a short "not modified" with no body. When no survey is due, that is all: no React is downloaded or run.
 - **When a survey is due:** the entry loads the dialog file `assets/dialog-<hash>.js` (about 358 kB, about 106 kB gzipped), which holds React, React Aria, the ARDC UI components and the popup's styles. The browser keeps it for a year, so it is downloaded once, not once a day.
 - **Caching:** files at the container root (`nectar-survey.js`, `surveys.json`, the pages) are checked with the server on every page load, so a release or a config change reaches users at once. Files under `assets/` have a hash of their content in their name and never change, so they are cached for a year without checks. A release that changes the dialog gives it a new name, and the new entry points to that name, so a stale dialog is never served.
 
@@ -62,17 +72,18 @@ The popup is split in two so that a page with no survey to show costs almost not
 
 The live config is the file `surveys.json` in the Swift container, in the same folder as `nectar-survey.js`. It is edited with the config editor (`editor.html` in the same container; see [docs/editing-surveys.md](docs/editing-surveys.md)) and uploaded by hand. CI never builds or deploys it, so a code release cannot overwrite it. The repository ships `public/surveys.example.json` as the template.
 
-The file holds a `surveys` list. The popup goes through the list in order and shows the first survey that applies, at most one per page load. Unknown keys are ignored. A survey is skipped when `id`, `status`, `opens`, `closes`, `title` or `services` is missing, when it has no usable link for the service, or when its `status` is not `live`.
+The file holds a `surveys` list. The popup goes through the list in order and shows the first survey that applies, at most one per page load (in [preview mode](#preview-mode), preview surveys come first). Unknown keys are ignored. A survey is skipped when `id`, `status`, `opens`, `closes`, `title` or `services` is missing, when it has no usable link for the service, when its `status` is `draft` or `archived`, or when it is `preview` and the page load is not in preview mode.
 
 Three text fields, `eyebrow`, `title` and `body`, can hold the placeholder `{service}`. The popup replaces it with the host's `service` attribute, so one survey entry reads "Tell us about your Nectar Dashboard experience" on the dashboard and "Tell us about your ARDC Jupyter Notebook Service experience" on Jupyter.
 
 - **`id`**: a stable identifier. The browser stores the user's choices under it, so change it only for a new survey.
-- **`status`**: one of three words.
+- **`status`**: one of four words, in the order a survey usually goes through them.
   - `"draft"`: never shown. Keep a survey a draft until its links are ready.
+  - `"preview"`: shown only on a page load in [preview mode](#preview-mode), never to anyone else, so it can be checked on the real services. Set it to `"live"` to publish.
   - `"live"`: shown to users while the survey is open.
   - `"archived"`: kept in the file for the record only. The popup never shows it, whatever the other fields say, and the editor lists it only under its Archived filter.
 
-  Any other value, or none, drops the survey with one warning, reason `status must be draft, live or archived`. Files from before version 0.2.0 used two keys, `enabled` and `archived`, instead. The popup ignores those keys, so such a file shows nothing until each survey has a status; the editor loads it and asks for one.
+  Any other value, or none, drops the survey with one warning, reason `status must be draft, preview, live or archived`. Files from before version 0.2.0 used two keys, `enabled` and `archived`, instead. The popup ignores those keys, so such a file shows nothing until each survey has a status; the editor loads it and asks for one.
 
 - **`opens`**: the first minute of the survey, `YYYY-MM-DDTHH:mm` (24-hour clock), in `timezone`, for example `2026-10-13T09:00`. A date alone means that day from 00:00.
 - **`closes`**: the last minute of the survey, `YYYY-MM-DDTHH:mm` (24-hour clock), in `timezone`. A date alone means that day up to 23:59. Both minutes are included, and `closes` may be the same minute as `opens`, but not earlier.
@@ -107,12 +118,13 @@ pnpm test:e2e           # Browser tests against the built demo (run pnpm build f
 pnpm test:e2e:ui        # Browser tests in the Playwright UI
 ```
 
-The demo page (`index.html`) is a plain stand-in for a host service. It reads `public/surveys.demo.json`, a copy of `surveys.json` with the survey live and a placeholder link (`https://example.com/nectar-survey`), open from 13 October to 14 November 2026.
+The demo page (`index.html`) is a plain stand-in for a host service. It reads `public/surveys.demo.json`, a copy of `surveys.json` with the survey live and a placeholder link (`https://example.com/nectar-survey`), open from 13 October to 14 November 2026, followed by a preview survey with the same dates.
 
 - The demo pretends it is 20 October 2026, 10:00, so the popup shows on the first visit whatever the real date is.
 - "Pretend the date is" sets the element's `now` attribute; clearing it uses the real date and time.
 - `?now=<ISO date or date and time>` in the address sets `now` before the element first checks, for example `/?now=2026-11-15T10:00` (after the survey closes). An empty `?now=` uses the real date and time.
 - "Reset saved state" forgets every stored choice and checks again.
+- `?nectar-survey=preview` shows the demo's preview survey, `nectar-2026-preview`, on that page load. The demo sets the `now` attribute, which comes before `nectar-survey-now`, so add an empty `now=` to try the clock override, for example `/?now=&nectar-survey=preview&nectar-survey-now=2026-10-19T09:00`.
 
 Under `pnpm dev` the demo loads the source as a module; the built `dist/index.html` loads `./nectar-survey.js` exactly as a host does. The Playwright tests (`e2e/`) drive the built demo.
 

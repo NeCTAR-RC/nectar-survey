@@ -53,11 +53,17 @@ export interface Survey {
 }
 
 /**
- * Every value `status` may hold, in the order the editor offers them:
- * `draft` is never shown, `live` is shown while the survey is open, and
- * `archived` keeps the survey in the file for the record only.
+ * Every value `status` may hold, in lifecycle order, which the editor offers
+ * them in: `draft` is never shown, `preview` is shown only on page loads in
+ * preview mode (see `skipReason`), `live` is shown while the survey is open,
+ * and `archived` keeps the survey in the file for the record only.
  */
-export const SURVEY_STATUSES = ["draft", "live", "archived"] as const;
+export const SURVEY_STATUSES = [
+  "draft",
+  "preview",
+  "live",
+  "archived",
+] as const;
 
 export type SurveyStatus = (typeof SURVEY_STATUSES)[number];
 
@@ -119,7 +125,7 @@ function parseSurvey(entry: unknown): Survey | string {
   if (!isObject(entry)) return "not an object";
   if (!isNonEmptyString(entry.id)) return "missing id";
   if (!isSurveyStatus(entry.status)) {
-    return "status must be draft, live or archived";
+    return "status must be draft, preview, live or archived";
   }
   if (!isNonEmptyString(entry.title)) return "missing title";
   const opens =

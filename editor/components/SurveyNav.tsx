@@ -317,8 +317,8 @@ interface SurveyRowProps {
 
 /**
  * One survey in the list: its number in the file and its id, its title on
- * one line, and a line of words only for what needs noticing (a draft, not
- * open, archived, errors). A live survey has no status word.
+ * one line, and a line of words only for what needs noticing (a draft or a
+ * preview, not open, archived, errors). A live survey has no status word.
  */
 function SurveyRow({
   survey,
@@ -330,6 +330,7 @@ function SurveyRow({
 }: SurveyRowProps) {
   const states = [
     survey.status === "draft" && STATUS_TEXT.draft.label,
+    survey.status === "preview" && STATUS_TEXT.preview.label,
     timing === "closed" && "Closed",
     timing === "upcoming" && "Upcoming",
     survey.status === "archived" && STATUS_TEXT.archived.label,
