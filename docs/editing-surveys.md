@@ -40,6 +40,7 @@ These rules are built into the popup and are the same for every survey:
 - Starting the survey, or ticking "Don't show me this again", stops that survey for good in that browser.
 - Only logged-in users see it, because each service adds the popup only to its logged-in pages.
 - The popup checks the dates when a page loads, not while it is open. A survey that opens while someone already has a page open appears on their next page load, and a popup that is already open when its survey closes stays open until they close it.
+- A survey shows only on the services it lists by exact name. There is no "every service" setting: a new service needs its name ticked, or typed under **Add another service name**, in each survey that should show on it.
 - When several surveys apply to a service at the same time, the first one in the list is shown and the others wait.
 - A survey with the status **Preview** never shows to users. It shows only on a page opened with `?nectar-survey=preview` at the end of its address (see [Testing a survey on the services before it goes live](#testing-a-survey-on-the-services-before-it-goes-live)), and only for that page load. There it follows its dates, services and links, shows every time (nothing is remembered for it) and comes before any other survey.
 

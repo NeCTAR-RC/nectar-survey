@@ -1,6 +1,6 @@
 import { Button, FieldError, Label, TextArea, TextField } from "@ardc-ui/react";
 import {
-  effectiveServices,
+  listedServices,
   KNOWN_SERVICES,
   renderParagraph,
 } from "../../model/index.ts";
@@ -16,11 +16,9 @@ export function PopupTextSection({
   survey,
   at,
   fieldId,
-  serviceNames,
   onChange,
 }: SectionProps) {
-  const sampleService =
-    effectiveServices(survey, serviceNames)[0] ?? KNOWN_SERVICES[0];
+  const sampleService = listedServices(survey)[0] ?? KNOWN_SERVICES[0];
   const shownOn = `As shown on ${sampleService}`;
 
   return (

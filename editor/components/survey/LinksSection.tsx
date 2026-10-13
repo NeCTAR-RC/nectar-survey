@@ -1,5 +1,5 @@
 import { Button, FieldError, Label, TextField } from "@ardc-ui/react";
-import { effectiveServices } from "../../model/index.ts";
+import { listedServices } from "../../model/index.ts";
 import { help, type SectionProps } from "./fieldHelp.tsx";
 import { FormSection } from "./FormSection.tsx";
 
@@ -7,16 +7,10 @@ import { FormSection } from "./FormSection.tsx";
  * The shared survey link, then one link per service. A link kept for a
  * service the survey no longer lists says so and can be removed.
  */
-export function LinksSection({
-  survey,
-  at,
-  fieldId,
-  serviceNames,
-  onChange,
-}: SectionProps) {
-  const listedServices = effectiveServices(survey, serviceNames);
+export function LinksSection({ survey, at, fieldId, onChange }: SectionProps) {
+  const surveyServices = listedServices(survey);
   const linkServices = [
-    ...new Set([...listedServices, ...Object.keys(survey.urls)]),
+    ...new Set([...surveyServices, ...Object.keys(survey.urls)]),
   ];
 
   return (
@@ -44,7 +38,7 @@ export function LinksSection({
         <div className="field-grid field-grid-2">
           {linkServices.map((service) => {
             const field = `urls.${service}`;
-            const listed = listedServices.includes(service);
+            const listed = surveyServices.includes(service);
             return (
               <div id={fieldId(field)} className="field" key={service}>
                 <TextField

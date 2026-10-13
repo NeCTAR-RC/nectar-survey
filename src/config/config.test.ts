@@ -35,7 +35,7 @@ function rawSurvey(overrides: Record<string, unknown> = {}) {
     status: "draft",
     opens: "2026-10-13",
     closes: "2026-11-14",
-    services: "all",
+    services: ["Nectar Dashboard"],
     title: "Title",
     ...overrides,
   };
@@ -61,7 +61,12 @@ describe("parseConfig", () => {
     expect(s.opens).toBe("2026-10-13T00:00");
     expect(s.closes).toBe("2026-11-14T23:59");
     expect(s.timezone).toBe("Australia/Melbourne");
-    expect(s.services).toBe("all");
+    expect(s.services).toEqual([
+      "Nectar Dashboard",
+      "ARDC Jupyter Notebook Service",
+      "ARDC BinderHub Service",
+      "ARDC Virtual Desktop Service",
+    ]);
     expect(s.eyebrow).toBe("Nectar research cloud survey");
     expect(s.title).toBe("Tell us about your {service} experience");
     expect(s.body).toHaveLength(2);
@@ -95,7 +100,7 @@ describe("parseConfig", () => {
       opens: "2026-10-13T00:00",
       closes: "2026-11-14T23:59",
       timezone: "Australia/Melbourne",
-      services: "all",
+      services: ["Nectar Dashboard"],
       title: "Title",
       body: [],
       startLabel: "Start survey",
@@ -218,12 +223,22 @@ describe("parseConfig", () => {
     ["empty services", rawSurvey({ services: [] })],
     ["services with an empty name", rawSurvey({ services: ["A", ""] })],
     ["services of the wrong type", rawSurvey({ services: "Nectar Dashboard" })],
+    ['services "all"', rawSurvey({ services: "all" })],
     ["body with a non-string entry", rawSurvey({ body: ["One", 2] })],
     ["body of the wrong type", rawSurvey({ body: { text: "One" } })],
   ])("drops a survey with %s and logs once", (_name, entry) => {
     const surveys = parseConfig({ surveys: [entry, rawSurvey({ id: "ok" })] });
     expect(surveys.map((s) => s.id)).toEqual(["ok"]);
     expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses services "all" with a clear reason', () => {
+    expect(parseConfig({ surveys: [rawSurvey({ services: "all" })] })).toEqual(
+      [],
+    );
+    expect(warn).toHaveBeenCalledWith(
+      'nectar-survey: survey "s" skipped: services must be a list of service names',
+    );
   });
 
   it("accepts a date and time as written and a date alone as whole days", () => {
@@ -369,10 +384,6 @@ describe("resolveSurveyUrl", () => {
 });
 
 describe("servicesMatch", () => {
-  it('matches everything for "all"', () => {
-    expect(servicesMatch(survey({ services: "all" }), "Anything")).toBe(true);
-  });
-
   it("matches listed names exactly", () => {
     const s = survey({
       services: ["Nectar Dashboard", "ARDC BinderHub Service"],

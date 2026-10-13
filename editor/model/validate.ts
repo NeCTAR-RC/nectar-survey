@@ -20,10 +20,9 @@ import {
   type Boundary,
 } from "../../src/config/dates.ts";
 import {
-  effectiveServices,
   isKnownService,
+  listedServices,
   OLDER_FORMAT_KEYS,
-  serviceNames,
   type Draft,
   type DraftSurvey,
 } from "./draft.ts";
@@ -77,10 +76,9 @@ export function validate(draft: Draft, now: Date = new Date()): Validation {
   const warnings: Issue[] = [];
   const timing: (SurveyTiming | undefined)[] = [];
   const parsed: (Survey | undefined)[] = [];
-  const names = serviceNames(draft);
 
   draft.surveys.forEach((survey, surveyIndex) => {
-    const surveyErrors = fieldErrors(survey, names).map((issue) => ({
+    const surveyErrors = fieldErrors(survey).map((issue) => ({
       surveyIndex,
       ...issue,
     }));
@@ -107,7 +105,7 @@ export function validate(draft: Draft, now: Date = new Date()): Validation {
     // not what was meant"; its errors still count, since the popup parses it.
     if (survey.status !== "archived") {
       warnings.push(
-        ...surveyWarnings(survey, result, now, names).map((issue) => ({
+        ...surveyWarnings(survey, result, now).map((issue) => ({
           surveyIndex,
           ...issue,
         })),
@@ -115,7 +113,7 @@ export function validate(draft: Draft, now: Date = new Date()): Validation {
     }
   });
 
-  warnings.push(...crossSurveyWarnings(draft, parsed, names));
+  warnings.push(...crossSurveyWarnings(draft, parsed));
   for (const key of Object.keys(draft.extra)) {
     warnings.push({
       message: `The file has an unknown top-level key "${key}". It is kept, but the popup ignores it.`,
@@ -142,7 +140,7 @@ function parseOne(survey: DraftSurvey): Survey | undefined {
  * same checks as `parseConfig` (`boundaryMinute`, `isValidTimeZone`, non-empty
  * text), one message per field.
  */
-function fieldErrors(survey: DraftSurvey, names: readonly string[]): Issue[] {
+function fieldErrors(survey: DraftSurvey): Issue[] {
   const issues: Issue[] = [];
   if (survey.id.trim() === "") {
     issues.push({ field: "id", message: "Enter an id, such as nectar-2026." });
@@ -176,10 +174,10 @@ function fieldErrors(survey: DraftSurvey, names: readonly string[]): Issue[] {
       message: `"${survey.timezone}" is not a time zone this browser knows. Use an IANA name such as Pacific/Auckland.`,
     });
   }
-  if (effectiveServices(survey, names).length === 0) {
+  if (listedServices(survey).length === 0) {
     issues.push({
       field: "services",
-      message: "Choose at least one service, or all services.",
+      message: "Choose at least one service.",
     });
   }
   if (survey.url !== "" && !isUsableUrl(survey.url)) {
@@ -211,7 +209,7 @@ export function isUsableUrl(url: string): boolean {
     opens: "",
     closes: "",
     timezone: DEFAULT_TIMEZONE,
-    services: "all",
+    services: [],
     title: "",
     body: [],
     url,
@@ -227,7 +225,6 @@ function surveyWarnings(
   survey: DraftSurvey,
   parsed: Survey | undefined,
   now: Date,
-  names: readonly string[],
 ): Issue[] {
   const issues: Issue[] = [];
 
@@ -246,12 +243,12 @@ function surveyWarnings(
   }
 
   if (parsed?.status === "live" || parsed?.status === "preview") {
-    const missing = effectiveServices(survey, names).filter(
+    const missing = listedServices(survey).filter(
       (service) => resolveSurveyUrl(parsed, service) === undefined,
     );
     if (
       missing.length > 0 &&
-      missing.length === effectiveServices(survey, names).length
+      missing.length === listedServices(survey).length
     ) {
       issues.push({
         field: "url",
@@ -285,9 +282,7 @@ function surveyWarnings(
     }
   }
 
-  // Only names the survey writes itself: "all" lists none.
-  const listed = survey.allServices ? [] : effectiveServices(survey, names);
-  for (const service of listed) {
+  for (const service of listedServices(survey)) {
     if (!isKnownService(service)) {
       issues.push({
         field: "services",
@@ -356,7 +351,6 @@ function surveyWarnings(
 function crossSurveyWarnings(
   draft: Draft,
   parsed: (Survey | undefined)[],
-  names: readonly string[],
 ): Issue[] {
   const issues: Issue[] = [];
   parsed.forEach((later, laterIndex) => {
@@ -367,7 +361,7 @@ function crossSurveyWarnings(
       if (earlier.opens > later.closes || later.opens > earlier.closes) {
         continue;
       }
-      const shared = effectiveServices(draft.surveys[laterIndex], names).filter(
+      const shared = listedServices(draft.surveys[laterIndex]).filter(
         (service) => servicesMatch(earlier, service),
       );
       if (shared.length === 0) continue;

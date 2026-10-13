@@ -103,7 +103,7 @@ describe("skipReason", () => {
           status: "live",
           opens: "2026-10-13",
           closes: "2026-11-14",
-          services: "all",
+          services: ["Nectar Dashboard"],
           title: "Title",
           url: "https://example.org/survey",
         },
@@ -125,13 +125,16 @@ describe("skipReason", () => {
     ).toBe("service");
   });
 
-  it('matches every service when services is "all"', () => {
+  it("matches each listed name exactly", () => {
+    const two = survey({
+      services: ["Nectar Dashboard", "ARDC BinderHub Service"],
+    });
     expect(
-      skipReason(
-        survey({ services: "all" }),
-        context({}, { service: "Anything" }),
-      ),
+      skipReason(two, context({}, { service: "ARDC BinderHub Service" })),
     ).toBeUndefined();
+    expect(skipReason(two, context({}, { service: "nectar dashboard" }))).toBe(
+      "service",
+    );
   });
 
   it("is no-url when neither url nor urls has a usable link", () => {

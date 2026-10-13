@@ -57,9 +57,7 @@ export function toSurveyObject(survey: DraftSurvey): Record<string, JsonValue> {
     closes: survey.closes,
   };
   if (survey.timezone.trim() !== "") out.timezone = survey.timezone;
-  out.services = survey.allServices
-    ? "all"
-    : survey.services.filter((service) => service.trim() !== "");
+  out.services = survey.services.filter((service) => service.trim() !== "");
   if (survey.eyebrow !== "") out.eyebrow = survey.eyebrow;
   out.title = survey.title;
   const body = survey.body.filter((paragraph) => paragraph.trim() !== "");
@@ -164,17 +162,12 @@ function readSurvey(entry: unknown, index: number): DraftSurvey | string {
     fields[key] = value;
   }
 
-  let allServices = false;
-  let services: string[] = [];
-  if (entry.services === "all") {
-    allServices = true;
-  } else if (entry.services === undefined) {
-    services = [];
-  } else if (isStringList(entry.services)) {
-    services = [...entry.services];
-  } else {
-    return `${name}: "services" must be "all" or a list of service names.`;
-  }
+  // "all" is refused like any other non-list, never turned into names, so
+  // loading a file and downloading it again never changes it.
+  let services: string[];
+  if (entry.services === undefined) services = [];
+  else if (isStringList(entry.services)) services = [...entry.services];
+  else return `${name}: "services" must be a list of service names.`;
 
   let body: string[];
   if (entry.body === undefined) body = [];
@@ -207,7 +200,6 @@ function readSurvey(entry: unknown, index: number): DraftSurvey | string {
     opens: fields.opens,
     closes: fields.closes,
     timezone: fields.timezone,
-    allServices,
     services,
     eyebrow: fields.eyebrow,
     title: fields.title,

@@ -7,7 +7,6 @@ import {
   TextField,
 } from "@ardc-ui/react";
 import {
-  ALL_SERVICES_OPTION,
   applyServiceSelection,
   isKnownService,
   serviceSelection,
@@ -16,12 +15,11 @@ import { help, replaceAt, type SectionProps } from "./fieldHelp.tsx";
 import { FormSection } from "./FormSection.tsx";
 
 /**
- * Which services show the survey: "All services" as a select-all over every
- * service name the draft knows of, one box per name, and this survey's names
- * outside the known four as text fields, where a brand-new name is typed.
- * The text fields show with All services on too: a name typed there is
- * ticked like the rest and becomes a box in every survey. The checkbox logic
- * lives in `applyServiceSelection`.
+ * Which services show the survey, by exact name: one box per service name
+ * the draft knows of, and this survey's names outside the known four as
+ * text fields, where a brand-new name is typed. A typed name is ticked and
+ * becomes a box in every survey. The checkbox logic lives in
+ * `applyServiceSelection`.
  */
 export function ServicesSection({
   survey,
@@ -41,21 +39,20 @@ export function ServicesSection({
     <FormSection
       title="Services"
       description="Where the popup offers this survey."
-      info="The popup matches the exact service name each service passes in. All services ticks itself once every service is ticked, and means every service, including any added later."
+      info="The popup matches the exact service name each service passes in. A new service needs its own name here."
     >
       <div id={fieldId("services")} className="field">
         <CheckboxGroup
           value={serviceSelection(survey, serviceNames)}
           onChange={(values) =>
-            onChange(applyServiceSelection(survey, values, serviceNames))
+            onChange({
+              services: applyServiceSelection(survey, values, serviceNames),
+            })
           }
           isInvalid={at("services").errors.length > 0}
         >
           <Label>Show this survey on</Label>
           {help(undefined, at("services").warnings)}
-          <CheckboxGroupItem value={ALL_SERVICES_OPTION}>
-            All services
-          </CheckboxGroupItem>
           {serviceNames.map((service) => (
             <CheckboxGroupItem key={service} value={service}>
               {service}
@@ -97,13 +94,6 @@ export function ServicesSection({
           >
             Add another service name
           </Button>
-          {survey.allServices && extraServices.length > 0 && (
-            <p className="field-help">
-              The file says only &quot;all&quot; for this survey, so a name
-              typed here is kept only through a link of its own under Survey
-              links, or through another survey that lists it by name.
-            </p>
-          )}
         </div>
       </div>
     </FormSection>

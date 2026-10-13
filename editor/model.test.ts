@@ -3,7 +3,6 @@ import { CalendarDateTime } from "@internationalized/date";
 import exampleJson from "../public/surveys.example.json?raw";
 import { parseConfig, SURVEY_STATUSES } from "../src/config/config.ts";
 import {
-  ALL_SERVICES_OPTION,
   applyServiceSelection,
   boundaryFieldValue,
   browserTimeHint,
@@ -13,7 +12,6 @@ import {
   diff,
   DRAFT_STORAGE_KEY,
   duplicateSurvey,
-  effectiveServices,
   errorCounts,
   filterSurveys,
   fromJson,
@@ -24,6 +22,7 @@ import {
   jsonErrorOffset,
   KNOWN_SERVICES,
   linkToLive,
+  listedServices,
   loadDraft,
   matchesFilter,
   minuteText,
@@ -54,12 +53,11 @@ const NOW = new Date("2026-10-20T02:00:00Z");
 
 /**
  * A valid, live survey with a link, open on NOW, listing the four known
- * services by name (a new survey is for all services instead).
+ * services by name.
  */
 function survey(overrides: Partial<DraftSurvey> = {}): DraftSurvey {
   return {
     ...newSurvey([]),
-    allServices: false,
     id: "nectar-2026",
     status: "live",
     opens: "2026-10-13T00:00",
@@ -103,7 +101,7 @@ describe("survey status", () => {
         archived: false,
         opens: "2026-10-13T00:00",
         closes: "2026-11-14T23:59",
-        services: "all",
+        services: [...KNOWN_SERVICES],
         title: "Tell us about your {service} experience",
         url: "https://example.com/survey",
       },
@@ -238,90 +236,34 @@ describe("service selection", () => {
   const four = [...KNOWN_SERVICES];
   const five = [...four, "Other"];
 
-  it("ticks every name and All services as well when the survey is for all", () => {
-    expect(serviceSelection(survey({ allServices: true }), five)).toEqual([
-      ALL_SERVICES_OPTION,
-      ...five,
-    ]);
+  it("ticks exactly the names the survey lists", () => {
     expect(serviceSelection(survey({ services: three }), five)).toEqual(three);
+    expect(serviceSelection(survey({ services: [] }), five)).toEqual([]);
   });
 
-  it("turns on All services once the last name is ticked", () => {
-    const next = applyServiceSelection(survey({ services: three }), four, four);
-    expect(next).toEqual({ allServices: true, services: four });
-  });
-
-  it("needs a learned name ticked too before All services is on", () => {
-    const next = applyServiceSelection(survey({ services: three }), four, five);
-    expect(next).toEqual({ allServices: false, services: four });
-  });
-
-  it("turns off All services as soon as one name is unticked", () => {
-    const next = applyServiceSelection(
-      survey({ allServices: true }),
-      [ALL_SERVICES_OPTION, ...three, "Other"],
-      five,
+  it("lists exactly the ticked names, the last one too", () => {
+    expect(
+      applyServiceSelection(survey({ services: three }), four, four),
+    ).toEqual(four);
+    expect(
+      applyServiceSelection(survey({ services: four }), three, four),
+    ).toEqual(three);
+    expect(applyServiceSelection(survey({ services: four }), [], four)).toEqual(
+      [],
     );
-    expect(next).toEqual({
-      allServices: false,
-      services: [...three, "Other"],
-    });
   });
 
-  it("ticks every name when All services is ticked", () => {
-    const next = applyServiceSelection(
-      survey({ services: [dashboard] }),
-      [dashboard, ALL_SERVICES_OPTION],
-      five,
-    );
-    expect(next).toEqual({ allServices: true, services: five });
-  });
-
-  it("clears every name when All services is unticked", () => {
-    const next = applyServiceSelection(
-      survey({ allServices: true }),
-      five,
-      five,
-    );
-    expect(next).toEqual({ allServices: false, services: [] });
-  });
-
-  it("keeps the survey's own names through select-all changes", () => {
+  it("keeps the survey's own names, blank rows included, after the ticked ones", () => {
     const withOwn = survey({ services: [dashboard, "Other", ""] });
     expect(
       applyServiceSelection(withOwn, [dashboard, "Other", desktop], five),
-    ).toEqual({
-      allServices: false,
-      services: [dashboard, desktop, "Other", ""],
-    });
-    const all = applyServiceSelection(
-      withOwn,
-      [dashboard, "Other", ALL_SERVICES_OPTION],
-      five,
-    );
-    expect(all).toEqual({
-      allServices: true,
-      services: [...four, "Other", ""],
-    });
-    expect(applyServiceSelection({ ...withOwn, ...all }, five, five)).toEqual({
-      allServices: false,
-      services: ["Other", ""],
-    });
+    ).toEqual([dashboard, desktop, "Other", ""]);
   });
 
   it("drops an own name that is unticked by hand", () => {
     const withOwn = survey({ services: [dashboard, "Other"] });
-    expect(applyServiceSelection(withOwn, [dashboard], five)).toEqual({
-      allServices: false,
-      services: [dashboard],
-    });
-  });
-
-  it("keeps a name typed while All services is on ticked, with All still on", () => {
-    const typed = survey({ allServices: true, services: [...four, "Other"] });
-    expect(serviceSelection(typed, five)).toEqual([
-      ALL_SERVICES_OPTION,
-      ...five,
+    expect(applyServiceSelection(withOwn, [dashboard], five)).toEqual([
+      dashboard,
     ]);
   });
 });
@@ -353,14 +295,10 @@ describe("service names", () => {
     expect(isKnownService("Nectar dashboard")).toBe(false);
   });
 
-  it("reaches every learned name for all services, and only the list otherwise", () => {
-    const names = [...KNOWN_SERVICES, "Other"];
-    expect(effectiveServices(survey({ allServices: true }), names)).toEqual(
-      names,
-    );
-    expect(
-      effectiveServices(survey({ services: ["Other", " "] }), names),
-    ).toEqual(["Other"]);
+  it("lists the survey's names without blank rows", () => {
+    expect(listedServices(survey({ services: ["Other", " "] }))).toEqual([
+      "Other",
+    ]);
   });
 });
 
@@ -419,8 +357,13 @@ describe("toJson", () => {
     });
   });
 
-  it('writes "all" for all services', () => {
-    expect(toSurveyObject(survey({ allServices: true })).services).toBe("all");
+  it("writes the service list as given, without blank rows", () => {
+    const listed = ["ARDC BinderHub Service", "Other", "", "Nectar Dashboard"];
+    expect(toSurveyObject(survey({ services: listed })).services).toEqual([
+      "ARDC BinderHub Service",
+      "Other",
+      "Nectar Dashboard",
+    ]);
   });
 
   it("keeps unknown keys, after the known ones", () => {
@@ -467,10 +410,10 @@ describe("fromJson", () => {
   });
 
   it("reads a single body string as one paragraph and missing keys as empty", () => {
-    const draft = read('{"surveys":[{"id":"a","body":"Hi","services":"all"}]}');
+    const draft = read('{"surveys":[{"id":"a","body":"Hi"}]}');
     const [s] = draft.surveys;
     expect(s.body).toEqual(["Hi"]);
-    expect(s.allServices).toBe(true);
+    expect(s.services).toEqual([]);
     expect(s.title).toBe("");
     expect(s.status).toBe("");
   });
@@ -576,19 +519,30 @@ describe("validate errors", () => {
 });
 
 describe("new surveys and their names", () => {
-  it("starts a new survey for all services, keeping the four names", () => {
+  it("starts a new survey with the four known services listed by name", () => {
     const fresh = newSurvey([]);
-    expect(fresh.allServices).toBe(true);
     expect(fresh.services).toEqual([...KNOWN_SERVICES]);
-    expect(toSurveyObject(fresh).services).toBe("all");
+    expect(toSurveyObject(fresh).services).toEqual([...KNOWN_SERVICES]);
   });
 
-  it("keeps a file that lists the four by name off All services", () => {
-    const draft = read(
-      JSON.stringify({ surveys: [{ id: "a", services: [...KNOWN_SERVICES] }] }),
-    );
-    expect(draft.surveys[0].allServices).toBe(false);
-    expect(toJson(draft)).not.toContain('"services": "all"');
+  it("writes a loaded service list back unchanged", () => {
+    const services = [
+      "ARDC Virtual Desktop Service",
+      "Other",
+      "Nectar Dashboard",
+    ];
+    const draft = read(JSON.stringify({ surveys: [{ id: "a", services }] }));
+    expect(JSON.parse(toJson(draft)).surveys[0].services).toEqual(services);
+  });
+
+  it('refuses a file whose services is "all"', () => {
+    const result = fromJson('{"surveys":[{"id":"a","services":"all"}]}');
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.problem.message).toBe(
+        'Survey "a": "services" must be a list of service names.',
+      );
+    }
   });
 
   it("suggests survey-1 when no survey has a survey-<n> id", () => {
@@ -654,7 +608,7 @@ describe("dates and times", () => {
 
   it("writes a date-only value from a file back unchanged unless edited", () => {
     const text =
-      '{"surveys":[{"id":"a","status":"draft","opens":"2026-10-13","closes":"2026-11-14","services":"all","title":"t"}]}';
+      '{"surveys":[{"id":"a","status":"draft","opens":"2026-10-13","closes":"2026-11-14","services":["Nectar Dashboard"],"title":"t"}]}';
     const loaded = read(text);
     expect(validate(loaded, NOW).errors).toEqual([]);
     const [kept] = JSON.parse(toJson(loaded)).surveys;
@@ -812,7 +766,6 @@ describe("validate warnings", () => {
       survey({
         key: "b",
         id: "other",
-        allServices: true,
         opens: "2026-11-01",
         closes: "2026-12-01",
       }),
@@ -828,7 +781,7 @@ describe("validate warnings", () => {
   it("lists shared services with a final and", () => {
     const draft = draftOf(
       survey({ services: ["Nectar Dashboard", "ARDC BinderHub Service"] }),
-      survey({ key: "b", id: "other", allServices: true }),
+      survey({ key: "b", id: "other" }),
     );
     expect(warningsFor(draft)[0].message).toContain(
       "on Nectar Dashboard and ARDC BinderHub Service.",
@@ -856,10 +809,10 @@ describe("validate warnings", () => {
     ]);
   });
 
-  it("does not warn about learned names on a survey for all services", () => {
+  it("warns about an unknown name only on the survey that lists it", () => {
     const draft = draftOf(
       survey({ services: ["Nectar Dashboard", "Other"], urls: { Other: "" } }),
-      survey({ key: "b", id: "all", allServices: true }),
+      survey({ key: "b", id: "known" }),
     );
     const unknown = warningsFor(draft).filter((w) =>
       w.message.includes("is not a service the editor knows"),
@@ -1108,10 +1061,10 @@ describe("survey filter", () => {
     }
   });
 
-  it("matches a service the survey lists, and every service for all services", () => {
+  it("matches only a service the survey lists", () => {
     const binder = { search: "", service: "ARDC BinderHub Service" };
     const dashboardOnly = survey({ services: ["Nectar Dashboard"] });
-    const everywhere = survey({ allServices: true, services: [] });
+    const everywhere = survey({ services: [...KNOWN_SERVICES] });
     expect(matchesFilter(dashboardOnly, "open", binder)).toBe(false);
     expect(
       matchesFilter(dashboardOnly, "open", {

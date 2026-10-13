@@ -83,8 +83,10 @@ export interface DraftSurvey {
   closes: string;
   /** Empty means the popup default, Australia/Melbourne. */
   timezone: string;
-  /** True writes `"services": "all"`; `services` is then kept but unused. */
-  allServices: boolean;
+  /**
+   * Exact service names, in file order and written as given; blank entries
+   * are rows still being typed and are left out of the file.
+   */
   services: string[];
   eyebrow: string;
   title: string;
@@ -120,10 +122,8 @@ export function emptyDraft(): Draft {
 }
 
 /**
- * A new draft survey for all services in Melbourne time. Its suggested
- * id is the lowest free `survey-<n>`: not in `existingIds`. The four known
- * names stay in `services`, so unticking All services leaves them to work
- * with.
+ * A new draft survey for the four known services in Melbourne time. Its
+ * suggested id is the lowest free `survey-<n>`: not in `existingIds`.
  */
 export function newSurvey(existingIds: readonly string[]): DraftSurvey {
   return {
@@ -133,7 +133,6 @@ export function newSurvey(existingIds: readonly string[]): DraftSurvey {
     opens: "",
     closes: "",
     timezone: DEFAULT_TIMEZONE,
-    allServices: true,
     services: [...KNOWN_SERVICES],
     eyebrow: "",
     title: "",
@@ -228,65 +227,41 @@ export function serviceNames(draft: Draft): string[] {
   return [...names];
 }
 
-/**
- * The services a survey reaches. For "all" that is every name in `names`
- * (normally `serviceNames(draft)`): the popup's "all" matches any name a
- * host sends, so the warnings and the preview treat every service the
- * draft knows of as reached.
- */
-export function effectiveServices(
-  survey: DraftSurvey,
-  names: readonly string[],
-): string[] {
-  if (survey.allServices) return [...names];
+/** The service names a survey lists, without blank rows still being typed. */
+export function listedServices(survey: DraftSurvey): string[] {
   return survey.services.filter((service) => service.trim() !== "");
 }
 
-/** The value of the "All services" box in the Services checkbox group. */
-export const ALL_SERVICES_OPTION = "all";
-
 /**
  * The ticked values of the Services checkbox group for `survey`, whose boxes
- * are `names`: the names it lists, or every name and "All services" as well
- * when the survey is for all.
+ * are `names`: the names it lists.
  */
 export function serviceSelection(
   survey: DraftSurvey,
   names: readonly string[],
 ): string[] {
-  if (survey.allServices) return [ALL_SERVICES_OPTION, ...names];
   return names.filter((name) => survey.services.includes(name));
 }
 
 /**
  * The survey's services after the Services checkbox group, whose boxes are
- * `names`, changes to `values`. "All services" is a select-all: ticking it
- * ticks every name and unticking it clears them, and it follows the others,
- * on once every name is ticked and off as soon as one is not. Names outside
- * the known four belong to the survey's own text fields: a select-all change
- * keeps them, and only unticking one by hand drops it.
+ * `names`, changes to `values`: the ticked known names in box order, then
+ * the survey's own names outside the known four, in their order. Those
+ * belong to the survey's text fields, so a box only drops one when it is
+ * unticked by hand.
  */
 export function applyServiceSelection(
   survey: DraftSurvey,
   values: string[],
   names: readonly string[],
-): Pick<DraftSurvey, "allServices" | "services"> {
-  const allToggled =
-    values.includes(ALL_SERVICES_OPTION) !== survey.allServices;
-  const ticked = allToggled
-    ? survey.allServices
-      ? []
-      : [...names]
-    : names.filter((name) => values.includes(name));
+): string[] {
+  const ticked = names.filter((name) => values.includes(name));
   const own = survey.services.filter(
     (service) =>
       !isKnownService(service) &&
-      (allToggled || !names.includes(service) || ticked.includes(service)),
+      (!names.includes(service) || ticked.includes(service)),
   );
-  return {
-    allServices: names.every((name) => ticked.includes(name)),
-    services: [...ticked.filter((name) => !own.includes(name)), ...own],
-  };
+  return [...ticked.filter((name) => !own.includes(name)), ...own];
 }
 
 /**

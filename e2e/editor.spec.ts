@@ -12,6 +12,14 @@ test.use({ timezoneId: "Australia/Melbourne" });
 
 const TEMPLATE_TITLE = "Tell us about your {service} experience";
 
+/** The four services the editor knows, in its order. */
+const KNOWN_NAMES = [
+  "Nectar Dashboard",
+  "ARDC Jupyter Notebook Service",
+  "ARDC BinderHub Service",
+  "ARDC Virtual Desktop Service",
+];
+
 /** Opens the editor and starts from the template. */
 async function openTemplate(page: Page): Promise<void> {
   await page.goto("/editor.html");
@@ -242,79 +250,67 @@ test("raw JSON and the form stay in step both ways", async ({ page }) => {
   await expect(titleField(page)).toHaveValue("From the form {service}");
 });
 
-test("All services follows the service boxes and drives them", async ({
+test("the service boxes list exactly the ticked names in the file", async ({
   page,
 }) => {
   await openTemplate(page);
   const group = page.getByRole("group", { name: "Show this survey on" });
-  const all = group.getByRole("checkbox", { name: "All services" });
-  const dashboard = group.getByRole("checkbox", { name: "Nectar Dashboard" });
   const raw = page.getByRole("textbox", { name: "surveys.json" });
   // The library hides the native inputs, so the labels are what gets clicked.
   const toggle = (name: string) =>
     group.getByText(name, { exact: true }).click();
+  const servicesInFile = async (): Promise<unknown> =>
+    JSON.parse(await raw.inputValue()).surveys[0].services;
 
-  // The template is for all services.
+  // One box per service, no "All services", and the template ticks the four.
   await openTab(page, /^JSON$/);
-  await expect(all).toBeChecked();
-  await expect(raw).toHaveValue(/"services": "all"/);
-
-  // Unticking one turns All services off, and the file lists the other three.
-  await toggle("Nectar Dashboard");
-  await expect(dashboard).not.toBeChecked();
-  await expect(all).not.toBeChecked();
-  await expect(raw).not.toHaveValue(/"services": "all"/);
-  await expect(raw).toHaveValue(
-    /"services": \[\n\s+"ARDC Jupyter Notebook Service",\n\s+"ARDC BinderHub Service",\n\s+"ARDC Virtual Desktop Service"\n\s+\]/,
-  );
-
-  // Ticking it back completes the set: All services goes on again.
-  await toggle("Nectar Dashboard");
-  await expect(all).toBeChecked();
-  await expect(raw).toHaveValue(/"services": "all"/);
-
-  // Unticking another while All services is on turns it off again.
-  await toggle("ARDC BinderHub Service");
-  await expect(all).not.toBeChecked();
-  await expect(raw).not.toHaveValue(/"services": "all"/);
-
-  // All services ticks every service, and unticking it clears them.
-  await toggle("All services");
-  for (const name of [
-    "Nectar Dashboard",
-    "ARDC Jupyter Notebook Service",
-    "ARDC BinderHub Service",
-    "ARDC Virtual Desktop Service",
-  ]) {
+  await expect(group.getByRole("checkbox")).toHaveCount(4);
+  await expect(
+    group.getByRole("checkbox", { name: "All services" }),
+  ).toHaveCount(0);
+  for (const name of KNOWN_NAMES) {
     await expect(group.getByRole("checkbox", { name })).toBeChecked();
   }
-  await expect(raw).toHaveValue(/"services": "all"/);
-  await toggle("All services");
-  await expect(dashboard).not.toBeChecked();
-  await expect(all).not.toBeChecked();
+  expect(await servicesInFile()).toEqual(KNOWN_NAMES);
+
+  // Unticking one leaves exactly the other three in the file.
+  await toggle("Nectar Dashboard");
+  await expect(
+    group.getByRole("checkbox", { name: "Nectar Dashboard" }),
+  ).not.toBeChecked();
+  await expect(raw).not.toHaveValue(/"Nectar Dashboard"/);
+  expect(await servicesInFile()).toEqual(KNOWN_NAMES.slice(1));
+
+  // Ticking it back lists it again, as a name, never as "all".
+  await toggle("Nectar Dashboard");
+  await expect(raw).toHaveValue(/"Nectar Dashboard"/);
+  expect(await servicesInFile()).toEqual(KNOWN_NAMES);
+
+  // Unticking every box leaves no services, which is an error.
+  for (const name of KNOWN_NAMES) await toggle(name);
+  await expect(raw).toHaveValue(/"services": \[\]/);
+  await expect(group.getByText("Choose at least one service.")).toBeVisible();
 });
 
 test("a service name typed in one survey is offered in every survey and the filter", async ({
   page,
 }) => {
   await openTemplate(page);
-  // A new survey is for all services, and still offers another name.
+  // A new survey starts with the four known services ticked, and offers
+  // another name.
   await nav(page).getByRole("button", { name: "Add survey" }).click();
   const form = surveyForm(page, "survey-1");
   const group = form.getByRole("group", { name: "Show this survey on" });
-  await expect(
-    group.getByRole("checkbox", { name: "All services" }),
-  ).toBeChecked();
+  for (const name of KNOWN_NAMES) {
+    await expect(group.getByRole("checkbox", { name })).toBeChecked();
+  }
   await form.getByRole("button", { name: "Add another service name" }).click();
   await form
     .getByRole("textbox", { name: "Other service name 1" })
     .fill("ARDC Research Data Service");
-  // Typed while All services is on, it is ticked like the rest.
+  // A typed name is ticked like the rest.
   await expect(
     group.getByRole("checkbox", { name: "ARDC Research Data Service" }),
-  ).toBeChecked();
-  await expect(
-    group.getByRole("checkbox", { name: "All services" }),
   ).toBeChecked();
 
   // The second survey offers it as a box of its own.
@@ -555,7 +551,7 @@ test("a file in the older format waits for a person to choose a status", async (
             enabled: true,
             opens: "2026-10-13T00:00",
             closes: "2026-11-14T23:59",
-            services: "all",
+            services: ["Nectar Dashboard"],
             title: TEMPLATE_TITLE,
             url: "https://example.com/survey",
           },

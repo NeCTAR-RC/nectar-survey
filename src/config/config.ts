@@ -25,8 +25,11 @@ export interface Survey {
   closes: string;
   /** IANA time zone, default "Australia/Melbourne". */
   timezone: string;
-  /** Service names that show this survey, or "all". */
-  services: "all" | string[];
+  /**
+   * The exact service names that show this survey, never empty. There is no
+   * wildcard: a new host means a new name in the list.
+   */
+  services: string[];
   /**
    * Optional short label shown above the title, plain text. Like `title`
    * and `body`, it may hold the placeholder `{service}`, which `renderText`
@@ -90,9 +93,10 @@ function isNonEmptyString(value: unknown): value is string {
  * `{ "surveys": [...] }` into validated surveys, in config order.
  *
  * A survey is dropped (one `console.warn` line each) when `id`, `status`,
- * `title`, `opens`, `closes` or `services` is missing or invalid, when
- * `opens` is after `closes`, or when `body` is neither a string nor a list
- * of strings. `opens` and `closes` come out as "YYYY-MM-DDTHH:mm" (see
+ * `title`, `opens`, `closes` or `services` is missing or invalid (`services`
+ * must be a list of exact names; the string "all" is refused), when `opens`
+ * is after `closes`, or when `body` is neither a string nor a list of
+ * strings. `opens` and `closes` come out as "YYYY-MM-DDTHH:mm" (see
  * `boundaryMinute`). An unknown `timezone` falls back to the default with a
  * `console.warn` line. Optional keys get their defaults and unknown keys are
  * ignored, the older format's `enabled` and `archived` too. A missing url
@@ -142,7 +146,7 @@ function parseSurvey(entry: unknown): Survey | string {
 
   const services = parseServices(entry.services);
   if (services === undefined) {
-    return 'services must be "all" or a list of service names';
+    return "services must be a list of service names";
   }
   const body = parseBody(entry.body);
   if (body === undefined) return "body must be a string or a list of strings";
@@ -193,8 +197,8 @@ function boundaryReason(boundary: Boundary): string {
   return `${boundary} must be a date, or a date and time, such as 2026-10-13T09:00`;
 }
 
-function parseServices(value: unknown): "all" | string[] | undefined {
-  if (value === "all") return "all";
+/** A non-empty list of non-empty names; anything else, "all" too, is refused. */
+function parseServices(value: unknown): string[] | undefined {
   if (
     Array.isArray(value) &&
     value.length > 0 &&
@@ -234,9 +238,9 @@ export function resolveSurveyUrl(
   return httpUrl(perService) ?? httpUrl(survey.url);
 }
 
-/** True when `survey.services` is "all" or lists `service` exactly (case sensitive). */
+/** True when `survey.services` lists `service` exactly (case sensitive). */
 export function servicesMatch(survey: Survey, service: string): boolean {
-  return survey.services === "all" || survey.services.includes(service);
+  return survey.services.includes(service);
 }
 
 /**

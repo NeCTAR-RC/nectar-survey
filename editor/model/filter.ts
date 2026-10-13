@@ -19,7 +19,7 @@ export interface SurveyFilter {
    * surveys are kept for the record and listed only when asked for.
    */
   status?: SurveyStatus;
-  /** A service name; a survey for all services matches every one. */
+  /** A service name the survey must list. */
   service?: string;
 }
 
@@ -92,11 +92,8 @@ export function matchesFilter(
   } else if (survey.status !== filter.status) {
     return false;
   }
-  // "all" matches any name a host sends, a learned one too.
   return (
-    filter.service === undefined ||
-    survey.allServices ||
-    survey.services.includes(filter.service)
+    filter.service === undefined || survey.services.includes(filter.service)
   );
 }
 
