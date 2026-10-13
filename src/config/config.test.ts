@@ -14,8 +14,7 @@ import {
 function survey(overrides: Partial<Survey> = {}): Survey {
   return {
     id: "s",
-    enabled: true,
-    archived: false,
+    status: "live",
     opens: "2026-10-13T00:00",
     closes: "2026-11-14T23:59",
     timezone: "Australia/Melbourne",
@@ -33,6 +32,7 @@ function survey(overrides: Partial<Survey> = {}): Survey {
 function rawSurvey(overrides: Record<string, unknown> = {}) {
   return {
     id: "s",
+    status: "draft",
     opens: "2026-10-13",
     closes: "2026-11-14",
     services: "all",
@@ -52,12 +52,12 @@ describe("parseConfig", () => {
     vi.restoreAllMocks();
   });
 
-  it("parses the shipped public/surveys.example.json to one disabled survey", () => {
+  it("parses the shipped public/surveys.example.json to one draft survey", () => {
     const surveys = parseConfig(JSON.parse(surveysJson));
     expect(surveys).toHaveLength(1);
     const [s] = surveys;
     expect(s.id).toBe("nectar-2026");
-    expect(s.enabled).toBe(false);
+    expect(s.status).toBe("draft");
     expect(s.opens).toBe("2026-10-13T00:00");
     expect(s.closes).toBe("2026-11-14T23:59");
     expect(s.timezone).toBe("Australia/Melbourne");
@@ -91,8 +91,7 @@ describe("parseConfig", () => {
     const [s] = parseConfig({ surveys: [rawSurvey()] });
     expect(s).toEqual({
       id: "s",
-      enabled: false,
-      archived: false,
+      status: "draft",
       opens: "2026-10-13T00:00",
       closes: "2026-11-14T23:59",
       timezone: "Australia/Melbourne",
@@ -105,27 +104,56 @@ describe("parseConfig", () => {
     });
   });
 
-  it("reads archived as true only for archived: true", () => {
-    const [plain, flagged, odd] = parseConfig({
-      surveys: [
-        rawSurvey({ id: "a" }),
-        rawSurvey({ id: "b", archived: true }),
-        rawSurvey({ id: "c", archived: "yes" }),
-      ],
-    });
-    expect(plain.archived).toBe(false);
-    expect(flagged.archived).toBe(true);
-    expect(odd.archived).toBe(false);
-  });
-
-  it("enables a survey only for enabled: true", () => {
+  it("reads each status as written", () => {
     const surveys = parseConfig({
       surveys: [
-        rawSurvey({ id: "a", enabled: true }),
-        rawSurvey({ id: "b", enabled: "true" }),
+        rawSurvey({ id: "a", status: "draft" }),
+        rawSurvey({ id: "b", status: "live" }),
+        rawSurvey({ id: "c", status: "archived" }),
       ],
     });
-    expect(surveys.map((s) => s.enabled)).toEqual([true, false]);
+    expect(surveys.map((s) => s.status)).toEqual(["draft", "live", "archived"]);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["missing", undefined],
+    ["in capitals", "Live"],
+    ["unknown", "preview"],
+    ["a boolean", true],
+  ])(
+    "drops a survey whose status is %s, naming the reason",
+    (_name, status) => {
+      const surveys = parseConfig({
+        surveys: [rawSurvey({ id: "bad", status }), rawSurvey({ id: "ok" })],
+      });
+      expect(surveys.map((s) => s.id)).toEqual(["ok"]);
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn).toHaveBeenCalledWith(
+        'nectar-survey: survey "bad" skipped: status must be draft, live or archived',
+      );
+    },
+  );
+
+  it("ignores the older enabled and archived keys", () => {
+    const surveys = parseConfig({
+      surveys: [
+        rawSurvey({ id: "old", status: undefined, enabled: true }),
+        rawSurvey({
+          id: "new",
+          status: "live",
+          enabled: false,
+          archived: true,
+        }),
+      ],
+    });
+    expect(surveys).toHaveLength(1);
+    const [s] = surveys;
+    expect(s.id).toBe("new");
+    expect(s.status).toBe("live");
+    expect(s).not.toHaveProperty("enabled");
+    expect(s).not.toHaveProperty("archived");
+    expect(warn).toHaveBeenCalledTimes(1);
   });
 
   it("wraps a single body string in a list", () => {

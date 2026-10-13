@@ -201,7 +201,7 @@ export function PreviewPanel({ draft }: PreviewPanelProps) {
           onChange={(asIfLive) => update({ asIfLive })}
           aria-describedby={AS_IF_LIVE_HELP_ID}
         >
-          Treat every survey as enabled
+          Treat every survey as live
         </Switch>
         <p id={AS_IF_LIVE_HELP_ID} className="field-help">
           A survey without a link uses {SAMPLE_SURVEY_URL}. Nothing here changes

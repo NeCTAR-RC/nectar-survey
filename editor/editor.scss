@@ -597,6 +597,24 @@ pre {
   @include text-style(body-14-muted);
 }
 
+// Label, help and error for a control without slots of its own (the Status
+// toggle buttons), set like the library's field header and FieldError.
+.field-header {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-1;
+}
+
+.field-label {
+  @include text-style(body-16-bold);
+}
+
+.field-error {
+  @include text-style(body-14);
+
+  color: $semantic-red-500;
+}
+
 .field-warning {
   display: block;
   margin-top: $spacing-1;

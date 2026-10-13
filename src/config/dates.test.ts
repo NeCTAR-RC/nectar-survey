@@ -13,8 +13,7 @@ import {
 function survey(overrides: Partial<Survey> = {}): Survey {
   return {
     id: "s",
-    enabled: true,
-    archived: false,
+    status: "live",
     opens: "2026-10-13T00:00",
     closes: "2026-11-14T23:59",
     timezone: "Australia/Melbourne",

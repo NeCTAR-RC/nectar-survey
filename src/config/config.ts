@@ -11,12 +11,8 @@ import { boundaryMinute, isValidTimeZone, type Boundary } from "./dates.ts";
 export interface Survey {
   /** Stable identifier; the browser stores the user's choices under it. */
   id: string;
-  enabled: boolean;
-  /**
-   * Set by the editor when a survey is kept in the file for the record only.
-   * The popup never shows an archived survey, whatever its other fields say.
-   */
-  archived: boolean;
+  /** Whether the popup may show the survey; see `SurveyStatus`. */
+  status: SurveyStatus;
   /**
    * First minute, "YYYY-MM-DDTHH:mm", inclusive, wall-clock time in
    * `timezone`. A date-only value in the file arrives here as `T00:00`.
@@ -56,6 +52,15 @@ export interface Survey {
   dismissLabel: string;
 }
 
+/**
+ * Every value `status` may hold, in the order the editor offers them:
+ * `draft` is never shown, `live` is shown while the survey is open, and
+ * `archived` keeps the survey in the file for the record only.
+ */
+export const SURVEY_STATUSES = ["draft", "live", "archived"] as const;
+
+export type SurveyStatus = (typeof SURVEY_STATUSES)[number];
+
 export const DEFAULT_TIMEZONE = "Australia/Melbourne";
 export const DEFAULT_START_LABEL = "Start survey";
 export const DEFAULT_LATER_LABEL = "Not right now";
@@ -78,14 +83,15 @@ function isNonEmptyString(value: unknown): value is string {
  * Parses a fetched `surveys.json` document of the shape
  * `{ "surveys": [...] }` into validated surveys, in config order.
  *
- * A survey is dropped (one `console.warn` line each) when `id`, `title`,
- * `opens`, `closes` or `services` is missing or invalid, when `opens` is
- * after `closes`, or when `body` is neither a string nor a list of strings.
- * `opens` and `closes` come out as "YYYY-MM-DDTHH:mm" (see `boundaryMinute`).
- * An unknown `timezone` falls back to the default with a `console.warn`
- * line. Optional keys get their defaults and unknown keys are ignored. A
- * missing url does not drop a survey here, since the url depends on the
- * service; the rules skip it instead. Never throws.
+ * A survey is dropped (one `console.warn` line each) when `id`, `status`,
+ * `title`, `opens`, `closes` or `services` is missing or invalid, when
+ * `opens` is after `closes`, or when `body` is neither a string nor a list
+ * of strings. `opens` and `closes` come out as "YYYY-MM-DDTHH:mm" (see
+ * `boundaryMinute`). An unknown `timezone` falls back to the default with a
+ * `console.warn` line. Optional keys get their defaults and unknown keys are
+ * ignored, the older format's `enabled` and `archived` too. A missing url
+ * does not drop a survey here, since the url depends on the service; the
+ * rules skip it instead. Never throws.
  */
 export function parseConfig(json: unknown): Survey[] {
   if (!isObject(json) || !Array.isArray(json.surveys)) {
@@ -112,6 +118,9 @@ export function parseConfig(json: unknown): Survey[] {
 function parseSurvey(entry: unknown): Survey | string {
   if (!isObject(entry)) return "not an object";
   if (!isNonEmptyString(entry.id)) return "missing id";
+  if (!isSurveyStatus(entry.status)) {
+    return "status must be draft, live or archived";
+  }
   if (!isNonEmptyString(entry.title)) return "missing title";
   const opens =
     typeof entry.opens === "string"
@@ -145,8 +154,7 @@ function parseSurvey(entry: unknown): Survey | string {
 
   const survey: Survey = {
     id: entry.id,
-    enabled: entry.enabled === true,
-    archived: entry.archived === true,
+    status: entry.status,
     opens,
     closes,
     timezone,
@@ -167,6 +175,11 @@ function parseSurvey(entry: unknown): Survey | string {
     survey.urls = urls;
   }
   return survey;
+}
+
+/** True for one of the values in `SURVEY_STATUSES`. */
+export function isSurveyStatus(value: unknown): value is SurveyStatus {
+  return SURVEY_STATUSES.some((status) => status === value);
 }
 
 /** Why an `opens` or `closes` value was refused, with an example of the form. */

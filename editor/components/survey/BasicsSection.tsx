@@ -1,10 +1,40 @@
-import { FieldError, Label, Switch, TextField } from "@ardc-ui/react";
-import { help, type SectionProps } from "./fieldHelp.tsx";
+import {
+  FieldError,
+  Label,
+  TextField,
+  ToggleButtonGroup,
+  ToggleButtonGroupItem,
+} from "@ardc-ui/react";
+import { useEffect, useRef } from "react";
+import { isSurveyStatus, SURVEY_STATUSES } from "../../../src/config/config.ts";
+import { chooseStatus, STATUS_TEXT } from "../../model/index.ts";
+import { help, helpParagraph, type SectionProps } from "./fieldHelp.tsx";
 import { FormSection } from "./FormSection.tsx";
 
-/** The survey's id and its on or off switch. */
+/**
+ * The survey's id and its status. The status is a toggle button group with
+ * one button per status. The group has no label, description or error slot
+ * of its own, so this section draws them and ties them to the group with
+ * `aria-labelledby` and `aria-describedby`. Nothing is pressed while a file
+ * in the older format has no status yet; once one is chosen, the group never
+ * goes empty again.
+ */
 export function BasicsSection({ survey, at, fieldId, onChange }: SectionProps) {
-  const enabledHelpId = `${fieldId("enabled")}-help`;
+  const status = at("status");
+  const statusId = fieldId("status");
+  const labelId = `${statusId}-label`;
+  const helpId = `${statusId}-help`;
+  const errorId = `${statusId}-error`;
+  const isInvalid = status.errors.length > 0;
+  const groupRef = useRef<HTMLDivElement>(null);
+
+  // React Aria filters aria-invalid out of the group's DOM props, and the
+  // group has no invalid state of its own, so it is set on the element.
+  useEffect(() => {
+    if (isInvalid) groupRef.current?.setAttribute("aria-invalid", "true");
+    else groupRef.current?.removeAttribute("aria-invalid");
+  }, [isInvalid]);
+
   return (
     <FormSection
       title="Basics"
@@ -25,18 +55,42 @@ export function BasicsSection({ survey, at, fieldId, onChange }: SectionProps) {
           <FieldError>{at("id").errors.join(" ")}</FieldError>
         </TextField>
       </div>
-      <div id={fieldId("enabled")} className="field">
-        <Switch
-          isSelected={survey.enabled}
-          onChange={(enabled) => onChange({ enabled })}
-          aria-describedby={enabledHelpId}
+      <div id={statusId} className="field">
+        <div className="field-header">
+          <span id={labelId} className="field-label">
+            Status
+          </span>
+          {helpParagraph(
+            helpId,
+            survey.status === ""
+              ? "Whether users see this survey."
+              : STATUS_TEXT[survey.status].help,
+            status.warnings,
+          )}
+        </div>
+        <ToggleButtonGroup
+          selectionMode="single"
+          selectedKeys={survey.status === "" ? [] : [survey.status]}
+          disallowEmptySelection={survey.status !== ""}
+          onSelectionChange={(keys) => {
+            const [key] = [...keys];
+            if (isSurveyStatus(key)) onChange(chooseStatus(survey, key));
+          }}
+          aria-labelledby={labelId}
+          aria-describedby={isInvalid ? `${helpId} ${errorId}` : helpId}
+          ref={groupRef}
         >
-          Enabled
-        </Switch>
-        <p id={enabledHelpId} className="field-help">
-          Shows this survey to users. Keep it off until the survey links are
-          ready.
-        </p>
+          {SURVEY_STATUSES.map((value) => (
+            <ToggleButtonGroupItem key={value} id={value}>
+              {STATUS_TEXT[value].label}
+            </ToggleButtonGroupItem>
+          ))}
+        </ToggleButtonGroup>
+        {isInvalid && (
+          <p id={errorId} className="field-error">
+            {status.errors.join(" ")}
+          </p>
+        )}
       </div>
     </FormSection>
   );

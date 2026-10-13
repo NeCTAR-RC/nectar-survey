@@ -62,13 +62,18 @@ The popup is split in two so that a page with no survey to show costs almost not
 
 The live config is the file `surveys.json` in the Swift container, in the same folder as `nectar-survey.js`. It is edited with the config editor (`editor.html` in the same container; see [docs/editing-surveys.md](docs/editing-surveys.md)) and uploaded by hand. CI never builds or deploys it, so a code release cannot overwrite it. The repository ships `public/surveys.example.json` as the template.
 
-The file holds a `surveys` list. The popup goes through the list in order and shows the first survey that applies, at most one per page load. Unknown keys are ignored. A survey is skipped when `id`, `opens`, `closes`, `title` or `services` is missing, when it has no usable link for the service, or when `enabled` is anything other than `true`.
+The file holds a `surveys` list. The popup goes through the list in order and shows the first survey that applies, at most one per page load. Unknown keys are ignored. A survey is skipped when `id`, `status`, `opens`, `closes`, `title` or `services` is missing, when it has no usable link for the service, or when its `status` is not `live`.
 
 Three text fields, `eyebrow`, `title` and `body`, can hold the placeholder `{service}`. The popup replaces it with the host's `service` attribute, so one survey entry reads "Tell us about your Nectar Dashboard experience" on the dashboard and "Tell us about your ARDC Jupyter Notebook Service experience" on Jupyter.
 
 - **`id`**: a stable identifier. The browser stores the user's choices under it, so change it only for a new survey.
-- **`enabled`**: `true` to show the survey. Keep `false` until the survey links are ready.
-- **`archived`**: optional. `true` keeps the survey in the file for the record only: the popup never shows it, whatever the other fields say, and the editor lists it under its Archived filter. Set and cleared with the editor's Archive and Unarchive buttons.
+- **`status`**: one of three words.
+  - `"draft"`: never shown. Keep a survey a draft until its links are ready.
+  - `"live"`: shown to users while the survey is open.
+  - `"archived"`: kept in the file for the record only. The popup never shows it, whatever the other fields say, and the editor lists it only under its Archived filter.
+
+  Any other value, or none, drops the survey with one warning, reason `status must be draft, live or archived`. Files from before version 0.2.0 used two keys, `enabled` and `archived`, instead. The popup ignores those keys, so such a file shows nothing until each survey has a status; the editor loads it and asks for one.
+
 - **`opens`**: the first minute of the survey, `YYYY-MM-DDTHH:mm` (24-hour clock), in `timezone`, for example `2026-10-13T09:00`. A date alone means that day from 00:00.
 - **`closes`**: the last minute of the survey, `YYYY-MM-DDTHH:mm` (24-hour clock), in `timezone`. A date alone means that day up to 23:59. Both minutes are included, and `closes` may be the same minute as `opens`, but not earlier.
 - **`timezone`**: the IANA time zone the two values are read in, for example `Australia/Melbourne`. Default `Australia/Melbourne`. The popup converts the user's current time into this zone before comparing, so it works the same wherever the user is.
@@ -102,7 +107,7 @@ pnpm test:e2e           # Browser tests against the built demo (run pnpm build f
 pnpm test:e2e:ui        # Browser tests in the Playwright UI
 ```
 
-The demo page (`index.html`) is a plain stand-in for a host service. It reads `public/surveys.demo.json`, a copy of `surveys.json` with the survey enabled and a placeholder link (`https://example.com/nectar-survey`), open from 13 October to 14 November 2026.
+The demo page (`index.html`) is a plain stand-in for a host service. It reads `public/surveys.demo.json`, a copy of `surveys.json` with the survey live and a placeholder link (`https://example.com/nectar-survey`), open from 13 October to 14 November 2026.
 
 - The demo pretends it is 20 October 2026, 10:00, so the popup shows on the first visit whatever the real date is.
 - "Pretend the date is" sets the element's `now` attribute; clearing it uses the real date and time.

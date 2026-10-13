@@ -8,6 +8,7 @@ import {
   boundaryFieldValue,
   browserTimeHint,
   carryOver,
+  chooseStatus,
   DEFAULT_FILTER,
   diff,
   DRAFT_STORAGE_KEY,
@@ -51,7 +52,7 @@ import {
 const NOW = new Date("2026-10-20T02:00:00Z");
 
 /**
- * A valid, enabled survey with a link, open on NOW, listing the four known
+ * A valid, live survey with a link, open on NOW, listing the four known
  * services by name (a new survey is for all services instead).
  */
 function survey(overrides: Partial<DraftSurvey> = {}): DraftSurvey {
@@ -59,7 +60,7 @@ function survey(overrides: Partial<DraftSurvey> = {}): DraftSurvey {
     ...newSurvey([]),
     allServices: false,
     id: "nectar-2026",
-    enabled: true,
+    status: "live",
     opens: "2026-10-13T00:00",
     closes: "2026-11-14T23:59",
     title: "Tell us about your {service} experience",
@@ -92,45 +93,141 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("archived surveys", () => {
-  it("round-trips archived through the file and leaves it out when false", () => {
-    const text = toJson(
-      draftOf(survey({ archived: true }), survey({ key: "b", id: "other" })),
-    );
-    expect(text).toMatch(
-      /"id": "nectar-2026",\n\s+"enabled": true,\n\s+"archived": true,/,
-    );
-    expect(text.match(/"archived"/g)).toHaveLength(1);
-    const back = read(text);
-    expect(back.surveys.map((s) => s.archived)).toEqual([true, false]);
+describe("survey status", () => {
+  const OLD_SHAPE = JSON.stringify({
+    surveys: [
+      {
+        id: "old",
+        enabled: true,
+        archived: false,
+        opens: "2026-10-13T00:00",
+        closes: "2026-11-14T23:59",
+        services: "all",
+        title: "Tell us about your {service} experience",
+        url: "https://example.com/survey",
+      },
+    ],
   });
 
-  it("rejects an archived value that is not true or false", () => {
-    const result = fromJson(
-      '{ "surveys": [ { "id": "a", "archived": "yes" } ] }',
+  it("round-trips each status, written right after the id", () => {
+    const draft = draftOf(
+      survey({ key: "a", id: "a", status: "draft" }),
+      survey({ key: "b", id: "b", status: "live" }),
+      survey({ key: "c", id: "c", status: "archived" }),
     );
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.problem.message).toContain('"archived"');
+    const text = toJson(draft);
+    expect(text).toMatch(/"id": "a",\n\s+"status": "draft",\n\s+"opens"/);
+    expect(read(text).surveys.map((s) => s.status)).toEqual([
+      "draft",
+      "live",
+      "archived",
+    ]);
+  });
+
+  it("reads a missing or unknown status as not chosen, and says so", () => {
+    for (const status of [undefined, "preview", true]) {
+      const text = JSON.stringify({
+        surveys: [{ ...toSurveyObject(survey()), status }],
+      });
+      const draft = read(text);
+      expect(draft.surveys[0].status).toBe("");
+      const result = validate(draft, NOW);
+      expect(result.errors).toEqual([
+        { surveyIndex: 0, field: "status", message: "Choose a status." },
+      ]);
+    }
+  });
+
+  it("loads an older file, explains its keys on Status and writes neither", () => {
+    const draft = read(OLD_SHAPE);
+    const [old] = draft.surveys;
+    expect(old.status).toBe("");
+    expect(old.extra).toEqual({ enabled: true, archived: false });
+
+    const result = validate(draft, NOW);
+    expect(fields(result.errors)).toEqual(["status"]);
+    expect(result.warnings).toEqual([
+      {
+        surveyIndex: 0,
+        field: "status",
+        message:
+          'Unknown key "enabled" (older format; choose a Status instead). The download leaves it out.',
+      },
+      {
+        surveyIndex: 0,
+        field: "status",
+        message:
+          'Unknown key "archived" (older format; choose a Status instead). The download leaves it out.',
+      },
+    ]);
+
+    const text = toJson(draft);
+    expect(text).toContain('"status": ""');
+    expect(text).not.toContain('"enabled"');
+    expect(text).not.toContain('"archived"');
+  });
+
+  it("drops the older keys when a status is chosen, keeping other unknown keys", () => {
+    const old = survey({ status: "", extra: { enabled: true, colour: "red" } });
+    expect(chooseStatus(old, "live")).toEqual({
+      status: "live",
+      extra: { colour: "red" },
+    });
+    const chosen = { ...old, ...chooseStatus(old, "live") };
+    expect(validate(draftOf(chosen), NOW).warnings).toEqual([
+      {
+        surveyIndex: 0,
+        message:
+          'Unknown key "colour". It is kept in the file, but the popup ignores it.',
+      },
+    ]);
+  });
+
+  it("shows the older keys going and the status arriving in the diff", () => {
+    const live = read(OLD_SHAPE);
+    const draft = {
+      ...live,
+      surveys: live.surveys.map((s) => ({ ...s, ...chooseStatus(s, "live") })),
+    };
+    expect(diff(live, draft).changes).toEqual([
+      { surveyId: "old", field: "status", from: "", to: "live" },
+      { surveyId: "old", field: "enabled", from: "true", to: "" },
+      { surveyId: "old", field: "archived", from: "false", to: "" },
+    ]);
+  });
+
+  it("shows a status change as a field change", () => {
+    const live = draftOf(survey({ status: "draft" }));
+    const draft = draftOf({ ...live.surveys[0], status: "live" });
+    expect(diff(live, draft).changes).toEqual([
+      { surveyId: "nectar-2026", field: "status", from: "draft", to: "live" },
+    ]);
   });
 
   it("raises no warnings for an archived survey but keeps its errors", () => {
-    const warned = draftOf(survey({ archived: true, url: "" }));
+    const warned = draftOf(survey({ status: "archived", url: "" }));
     const result = validate(warned, NOW);
     expect(result.warnings).toEqual([]);
-    const broken = draftOf(survey({ archived: true, title: "" }));
+    const broken = draftOf(survey({ status: "archived", title: "" }));
     expect(fields(validate(broken, NOW).errors)).toEqual(["title"]);
   });
 
-  it("does not count an archived survey in overlap warnings", () => {
-    const draft = draftOf(
-      survey({ archived: true }),
-      survey({ key: "b", id: "other" }),
-    );
-    expect(validate(draft, NOW).warnings).toEqual([]);
+  it("counts only live surveys in overlap warnings", () => {
+    for (const status of ["draft", "archived"] as const) {
+      const draft = draftOf(
+        survey({ status }),
+        survey({ key: "b", id: "other" }),
+      );
+      expect(validate(draft, NOW).warnings).toEqual([]);
+    }
   });
 
-  it("unarchives a duplicate", () => {
-    expect(duplicateSurvey(survey({ archived: true })).archived).toBe(false);
+  it("makes a duplicate a draft without the older keys", () => {
+    const copy = duplicateSurvey(
+      survey({ status: "archived", extra: { archived: true, colour: "red" } }),
+    );
+    expect(copy.status).toBe("draft");
+    expect(copy.extra).toEqual({ colour: "red" });
   });
 });
 
@@ -284,7 +381,7 @@ describe("toJson", () => {
     expect(text.startsWith('{\n  "surveys": [\n    {\n      "id"')).toBe(true);
     expect(Object.keys(JSON.parse(text).surveys[0])).toEqual([
       "id",
-      "enabled",
+      "status",
       "opens",
       "closes",
       "timezone",
@@ -313,7 +410,7 @@ describe("toJson", () => {
     );
     expect(object).toEqual({
       id: "nectar-2026",
-      enabled: true,
+      status: "live",
       opens: "2026-10-13T00:00",
       closes: "2026-11-14T23:59",
       services: ["Nectar Dashboard"],
@@ -374,7 +471,7 @@ describe("fromJson", () => {
     expect(s.body).toEqual(["Hi"]);
     expect(s.allServices).toBe(true);
     expect(s.title).toBe("");
-    expect(s.enabled).toBe(false);
+    expect(s.status).toBe("");
   });
 });
 
@@ -556,7 +653,7 @@ describe("dates and times", () => {
 
   it("writes a date-only value from a file back unchanged unless edited", () => {
     const text =
-      '{"surveys":[{"id":"a","opens":"2026-10-13","closes":"2026-11-14","services":"all","title":"t"}]}';
+      '{"surveys":[{"id":"a","status":"draft","opens":"2026-10-13","closes":"2026-11-14","services":"all","title":"t"}]}';
     const loaded = read(text);
     expect(validate(loaded, NOW).errors).toEqual([]);
     const [kept] = JSON.parse(toJson(loaded)).surveys;
@@ -662,8 +759,12 @@ describe("validate warnings", () => {
     expect(warningsFor(draftOf(survey()))).toEqual([]);
   });
 
-  it("warns when an enabled survey has no link at all", () => {
-    expect(fields(warningsFor(draftOf(survey({ url: "" }))))).toEqual(["url"]);
+  it("warns when a live survey has no link at all", () => {
+    const warnings = warningsFor(draftOf(survey({ url: "" })));
+    expect(fields(warnings)).toEqual(["url"]);
+    expect(warnings[0].message).toBe(
+      "This survey is live but has no survey link, so the popup does not show it anywhere.",
+    );
   });
 
   it("warns per service when only some services have a link", () => {
@@ -677,8 +778,8 @@ describe("validate warnings", () => {
     expect(fields(warningsFor(draft))).toEqual(["urls.ARDC BinderHub Service"]);
   });
 
-  it("does not ask for links while a survey is disabled", () => {
-    expect(warningsFor(draftOf(survey({ enabled: false, url: "" })))).toEqual(
+  it("does not ask for links while a survey is a draft", () => {
+    expect(warningsFor(draftOf(survey({ status: "draft", url: "" })))).toEqual(
       [],
     );
   });
@@ -704,7 +805,7 @@ describe("validate warnings", () => {
     expect(warningsFor(inAYear)).toEqual([]);
   });
 
-  it("warns when two enabled surveys overlap for the same service", () => {
+  it("warns when two live surveys overlap for the same service", () => {
     const draft = draftOf(
       survey({ services: ["Nectar Dashboard"] }),
       survey({
@@ -846,7 +947,7 @@ describe("timing", () => {
   });
 
   it("is listed for archived surveys too", () => {
-    expect(timingOf({ archived: true })).toBe("open");
+    expect(timingOf({ status: "archived" })).toBe("open");
   });
 });
 
@@ -866,15 +967,11 @@ describe("errorCounts", () => {
 });
 
 describe("the Would show now preset", () => {
-  it("is open now, enabled and current", () => {
-    expect(SHOWING_NOW).toEqual({
-      dates: "open",
-      status: "enabled",
-      archive: "current",
-    });
+  it("is open now and live", () => {
+    expect(SHOWING_NOW).toEqual({ dates: "open", status: "live" });
   });
 
-  it("is on exactly while the three groups hold the preset", () => {
+  it("is on exactly while both groups hold the preset", () => {
     expect(isShowingNow({ search: "x", ...SHOWING_NOW })).toBe(true);
     expect(
       isShowingNow({ ...SHOWING_NOW, search: "", service: "Nectar Dashboard" }),
@@ -884,7 +981,7 @@ describe("the Would show now preset", () => {
       isShowingNow({ ...SHOWING_NOW, search: "", dates: "upcoming" }),
     ).toBe(false);
     expect(
-      isShowingNow({ ...SHOWING_NOW, search: "", archive: undefined }),
+      isShowingNow({ ...SHOWING_NOW, search: "", status: undefined }),
     ).toBe(false);
   });
 
@@ -892,7 +989,7 @@ describe("the Would show now preset", () => {
     const filter: SurveyFilter = {
       search: "nectar",
       dates: "closed",
-      archive: "archived",
+      status: "archived",
       service: "Nectar Dashboard",
     };
     expect(withShowingNow(filter, true)).toEqual({
@@ -902,7 +999,7 @@ describe("the Would show now preset", () => {
     });
   });
 
-  it("turns off to any, Archive included, and keeps the search and the service", () => {
+  it("turns off to the default groups and keeps the search and the service", () => {
     const on = withShowingNow(
       { search: "nectar", service: "Nectar Dashboard" },
       true,
@@ -913,7 +1010,6 @@ describe("the Would show now preset", () => {
       service: "Nectar Dashboard",
       dates: undefined,
       status: undefined,
-      archive: undefined,
     });
     expect(isShowingNow(off)).toBe(false);
   });
@@ -922,20 +1018,18 @@ describe("the Would show now preset", () => {
 describe("survey filter", () => {
   const anything: SurveyFilter = { search: "" };
 
-  it("starts on current surveys, which is not counted as filtering", () => {
-    expect(DEFAULT_FILTER).toEqual({ search: "", archive: "current" });
+  it("starts on every survey but the archived ones, which is not counted as filtering", () => {
+    expect(DEFAULT_FILTER).toEqual({ search: "" });
     expect(isFilterActive(DEFAULT_FILTER)).toBe(false);
     expect(isFilterActive({ ...DEFAULT_FILTER, search: "  " })).toBe(false);
   });
 
   it("counts any change from the default, or search text, as filtering", () => {
-    expect(isFilterActive(anything)).toBe(true);
     expect(isFilterActive({ ...DEFAULT_FILTER, search: "nectar" })).toBe(true);
     expect(isFilterActive({ ...DEFAULT_FILTER, dates: "open" })).toBe(true);
-    expect(isFilterActive({ ...DEFAULT_FILTER, status: "enabled" })).toBe(true);
-    expect(isFilterActive({ ...DEFAULT_FILTER, archive: "archived" })).toBe(
-      true,
-    );
+    for (const status of ["draft", "live", "archived"] as const) {
+      expect(isFilterActive({ ...DEFAULT_FILTER, status })).toBe(true);
+    }
     expect(
       isFilterActive({ ...DEFAULT_FILTER, service: "Nectar Dashboard" }),
     ).toBe(true);
@@ -972,23 +1066,36 @@ describe("survey filter", () => {
     expect(matchesFilter(unreadable, undefined, anything)).toBe(true);
   });
 
-  it("matches on the Enabled switch", () => {
-    const on = survey({ enabled: true });
-    const off = survey({ enabled: false });
-    const enabled: SurveyFilter = { search: "", status: "enabled" };
-    const disabled: SurveyFilter = { search: "", status: "disabled" };
-    expect(matchesFilter(on, "open", enabled)).toBe(true);
-    expect(matchesFilter(off, "open", enabled)).toBe(false);
-    expect(matchesFilter(off, "open", disabled)).toBe(true);
+  it("matches a Status choice on the survey's status only", () => {
+    const byStatus = {
+      draft: survey({ status: "draft" }),
+      live: survey({ status: "live" }),
+      archived: survey({ status: "archived" }),
+    };
+    for (const chosen of ["draft", "live", "archived"] as const) {
+      for (const [status, target] of Object.entries(byStatus)) {
+        expect(
+          matchesFilter(target, "open", { search: "", status: chosen }),
+        ).toBe(status === chosen);
+      }
+    }
+    expect(
+      matchesFilter(survey({ status: "" }), "open", {
+        search: "",
+        status: "draft",
+      }),
+    ).toBe(false);
   });
 
-  it("matches on archiving", () => {
-    const archived = survey({ archived: true });
-    expect(matchesFilter(archived, "open", DEFAULT_FILTER)).toBe(false);
+  it("hides archived surveys until the Archived choice is made", () => {
     expect(
-      matchesFilter(archived, "open", { search: "", archive: "archived" }),
-    ).toBe(true);
-    expect(matchesFilter(survey(), "open", DEFAULT_FILTER)).toBe(true);
+      matchesFilter(survey({ status: "archived" }), "open", DEFAULT_FILTER),
+    ).toBe(false);
+    for (const status of ["draft", "live", ""] as const) {
+      expect(matchesFilter(survey({ status }), "open", DEFAULT_FILTER)).toBe(
+        true,
+      );
+    }
   });
 
   it("matches a service the survey lists, and every service for all services", () => {
@@ -1013,10 +1120,10 @@ describe("survey filter", () => {
     const filter: SurveyFilter = {
       search: "nectar",
       dates: "open",
-      status: "enabled",
+      status: "live",
     };
     expect(matchesFilter(survey(), "open", filter)).toBe(true);
-    expect(matchesFilter(survey({ enabled: false }), "open", filter)).toBe(
+    expect(matchesFilter(survey({ status: "draft" }), "open", filter)).toBe(
       false,
     );
     expect(matchesFilter(survey(), "closed", filter)).toBe(false);
@@ -1032,7 +1139,7 @@ describe("survey filter", () => {
         opens: "2026-01-01",
         closes: "2026-01-31",
       }),
-      survey({ key: "c", id: "archived", archived: true }),
+      survey({ key: "c", id: "archived", status: "archived" }),
       survey({
         key: "d",
         id: "later",
@@ -1047,10 +1154,23 @@ describe("survey filter", () => {
     ).toEqual([1]);
     expect(
       filterSurveys(draft, validation, { search: "", dates: "open" }),
-    ).toEqual([0, 2]);
+    ).toEqual([0]);
+    expect(
+      filterSurveys(draft, validation, {
+        search: "",
+        dates: "open",
+        status: "archived",
+      }),
+    ).toEqual([2]);
+    expect(
+      filterSurveys(draft, validation, { search: "", status: "archived" }),
+    ).toEqual([2]);
     expect(
       filterSurveys(draft, validation, { search: "", dates: "upcoming" }),
     ).toEqual([3]);
+    expect(
+      filterSurveys(draft, validation, withShowingNow(DEFAULT_FILTER, true)),
+    ).toEqual([0]);
   });
 });
 
@@ -1176,25 +1296,56 @@ describe("linking to live", () => {
   it("gives a duplicate its own key, a new id and no live link", () => {
     const copy = duplicateSurvey(survey({ liveId: "nectar-2026" }));
     expect(copy.id).toBe("nectar-2026-copy");
-    expect(copy.enabled).toBe(false);
+    expect(copy.status).toBe("draft");
     expect(copy.liveId).toBeUndefined();
   });
 });
 
 describe("preview", () => {
-  it("can enable every survey and fill in a sample link", () => {
+  it("can treat every survey as live and fill in a sample link", () => {
     const config = previewConfig(
-      draftOf(survey({ enabled: false, url: "" })),
+      draftOf(
+        survey({ key: "a", id: "a", status: "draft", url: "" }),
+        survey({ key: "b", id: "b", status: "" }),
+      ),
       true,
     );
     expect(config.surveys).toMatchObject([
-      { enabled: true, url: SAMPLE_SURVEY_URL },
+      { status: "live", url: SAMPLE_SURVEY_URL },
+      { status: "live", url: "https://example.com/survey" },
     ]);
   });
 
+  it("keeps archived surveys archived when treating surveys as live", () => {
+    const config = previewConfig(draftOf(survey({ status: "archived" })), true);
+    expect(config.surveys).toMatchObject([{ status: "archived" }]);
+  });
+
   it("uses the draft as it is otherwise", () => {
-    const config = previewConfig(draftOf(survey({ enabled: false })), false);
-    expect(config.surveys).toMatchObject([{ enabled: false }]);
+    const config = previewConfig(draftOf(survey({ status: "draft" })), false);
+    expect(config.surveys).toMatchObject([{ status: "draft" }]);
+  });
+
+  it("names a draft and an archived survey among the skipped ones", () => {
+    const config = previewConfig(
+      draftOf(
+        survey({ key: "a", id: "a", status: "draft" }),
+        survey({ key: "b", id: "b", status: "archived" }),
+      ),
+      false,
+    );
+    expect(
+      previewOutcome(config, {
+        service: "Nectar Dashboard",
+        now: NOW,
+        readState: () => ({}),
+      }),
+    ).toEqual({
+      skipped: [
+        { id: "a", reason: "a draft, not live" },
+        { id: "b", reason: "archived" },
+      ],
+    });
   });
 
   it("explains which survey shows and why others do not", () => {

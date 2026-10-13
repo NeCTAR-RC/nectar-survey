@@ -56,9 +56,12 @@ describe("editorReducer", () => {
 
   it("updates the form from valid raw text and keeps survey identity", () => {
     const before = withTemplate();
-    const text = before.rawText.replace('"enabled": false', '"enabled": true');
+    const text = before.rawText.replace(
+      '"status": "draft"',
+      '"status": "live"',
+    );
     const state = editorReducer(before, { type: "edit-raw", text });
-    expect(state.draft.surveys[0].enabled).toBe(true);
+    expect(state.draft.surveys[0].status).toBe("live");
     expect(state.draft.surveys[0].key).toBe(before.draft.surveys[0].key);
     expect(state.rawText).toBe(text);
   });
@@ -106,17 +109,19 @@ describe("editorReducer", () => {
     expect(state.draft.surveys.at(-1)?.id).toBe("survey-3");
   });
 
-  it("archives and unarchives through the raw text", () => {
+  it("writes a status change through to the raw text", () => {
     let state = editorReducer(withTemplate(), {
       type: "update-survey",
       index: 0,
-      patch: { archived: true },
+      patch: { status: "archived" },
     });
-    expect(state.rawText).toMatch(/"enabled": false,\n\s+"archived": true,/);
+    expect(state.rawText).toMatch(
+      /"id": "nectar-2026",\n\s+"status": "archived",/,
+    );
     state = editorReducer(state, {
       type: "update-survey",
       index: 0,
-      patch: { archived: false },
+      patch: { status: "draft" },
     });
     expect(state.rawText).not.toContain("archived");
   });
@@ -247,7 +252,7 @@ describe("the selected survey", () => {
 
   it("keeps the survey through a raw edit while it keeps its identity", () => {
     const state = select(withSurveys(1), 1);
-    const text = state.rawText.replace('"enabled": false', '"enabled": true');
+    const text = state.rawText.replace('"status": "draft"', '"status": "live"');
     const edited = editorReducer(state, { type: "edit-raw", text });
     expect(edited.selectedKey).toBe(keyAt(state, 1));
     const broken = editorReducer(state, { type: "edit-raw", text: "{" });

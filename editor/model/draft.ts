@@ -4,7 +4,10 @@
  * and the live file. Nothing here reads or writes JSON; see `json.ts`.
  */
 
-import { DEFAULT_TIMEZONE } from "../../src/config/config.ts";
+import {
+  DEFAULT_TIMEZONE,
+  type SurveyStatus,
+} from "../../src/config/config.ts";
 import { boundaryMinute, type Boundary } from "../../src/config/dates.ts";
 
 /** The four services the popup is built for, in display order. */
@@ -28,6 +31,25 @@ export const TIMEZONE_OPTIONS = [
   { id: "UTC", label: "UTC" },
 ] as const;
 
+/** How the Status buttons and the editor's words name each status. */
+export const STATUS_TEXT: Record<
+  SurveyStatus,
+  { label: string; help: string }
+> = {
+  draft: { label: "Draft", help: "Not shown to anyone." },
+  live: { label: "Live", help: "Shown to users while it is open." },
+  archived: {
+    label: "Archived",
+    help: "Kept in the file for the record; never shown.",
+  },
+};
+
+/**
+ * Keys of the older file format, which `status` replaced. They are read as
+ * unknown keys, so the Problems tab can explain them, and never written.
+ */
+export const OLDER_FORMAT_KEYS: readonly string[] = ["enabled", "archived"];
+
 /** A JSON value kept as it was read, for keys the editor does not know. */
 export type JsonValue =
   string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
@@ -43,13 +65,11 @@ export interface DraftSurvey {
   /** The survey's id in the live file, when it came from there. */
   liveId?: string;
   id: string;
-  enabled: boolean;
   /**
-   * Kept in the file for the record only: listed under the editor's
-   * Archived filter, never shown by the popup. Set and cleared by the
-   * editor's Archive and Unarchive actions, never automatically.
+   * The survey's status, or "" while none is chosen: a file without a valid
+   * status reads as "", and a person migrates it by choosing one.
    */
-  archived: boolean;
+  status: SurveyStatus | "";
   /**
    * As typed or read: "YYYY-MM-DDTHH:mm", a date alone ("YYYY-MM-DD") from
    * an older file, or any text a file held. Never normalised on the way out.
@@ -96,7 +116,7 @@ export function emptyDraft(): Draft {
 }
 
 /**
- * A new, disabled survey for all services in Melbourne time. Its suggested
+ * A new draft survey for all services in Melbourne time. Its suggested
  * id is the lowest free `survey-<n>`: not in `existingIds`. The four known
  * names stay in `services`, so unticking All services leaves them to work
  * with.
@@ -105,8 +125,7 @@ export function newSurvey(existingIds: readonly string[]): DraftSurvey {
   return {
     key: newKey(),
     id: freeSurveyId(existingIds),
-    enabled: false,
-    archived: false,
+    status: "draft",
     opens: "",
     closes: "",
     timezone: DEFAULT_TIMEZONE,
@@ -142,18 +161,18 @@ export function surveyName(survey: DraftSurvey): string {
 }
 
 /**
- * A copy of `survey` to start the next one from: new id (`<id>-copy`), not
- * enabled, not archived, and not linked to a live survey. Date-only `opens`
- * and `closes` gain their implied times (00:00 and 23:59), so the copy
- * carries times.
+ * A copy of `survey` to start the next one from: new id (`<id>-copy`), a
+ * draft without the older format's keys, and not linked to a live survey.
+ * Date-only `opens` and `closes` gain their implied times (00:00 and
+ * 23:59), so the copy carries times.
  */
 export function duplicateSurvey(survey: DraftSurvey): DraftSurvey {
+  const copy = structuredClone({ ...survey, liveId: undefined });
   return {
-    ...structuredClone({ ...survey, liveId: undefined }),
+    ...copy,
+    ...chooseStatus(copy, "draft"),
     key: newKey(),
     id: `${survey.id}-copy`,
-    enabled: false,
-    archived: false,
     opens: withImpliedTime(survey.opens, "opens"),
     closes: withImpliedTime(survey.closes, "closes"),
   };
@@ -162,6 +181,23 @@ export function duplicateSurvey(survey: DraftSurvey): DraftSurvey {
 /** `value` with a date alone made explicit; anything else stays as typed. */
 function withImpliedTime(value: string, boundary: Boundary): string {
   return boundaryMinute(value, boundary) ?? value;
+}
+
+/**
+ * The change for choosing `status` in the form. It also drops the older
+ * format's keys from the survey, since the chosen status replaces them, so
+ * their warning goes once a person has chosen.
+ */
+export function chooseStatus(
+  survey: DraftSurvey,
+  status: SurveyStatus,
+): Pick<DraftSurvey, "status" | "extra"> {
+  const extra = Object.fromEntries(
+    Object.entries(survey.extra).filter(
+      ([key]) => !OLDER_FORMAT_KEYS.includes(key),
+    ),
+  );
+  return { status, extra };
 }
 
 const KNOWN: readonly string[] = KNOWN_SERVICES;

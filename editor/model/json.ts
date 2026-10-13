@@ -4,10 +4,12 @@
  * the text is not a config.
  */
 
+import { isSurveyStatus } from "../../src/config/config.ts";
 import {
   isRecord,
   isStringList,
   newKey,
+  OLDER_FORMAT_KEYS,
   type Draft,
   type DraftSurvey,
   type JsonValue,
@@ -25,8 +27,7 @@ export type FromJsonResult =
 
 const KNOWN_SURVEY_KEYS = new Set([
   "id",
-  "enabled",
-  "archived",
+  "status",
   "opens",
   "closes",
   "timezone",
@@ -44,16 +45,17 @@ const KNOWN_SURVEY_KEYS = new Set([
 /**
  * The survey as a config object, keys in the README's config-reference order
  * followed by unknown keys as they were. Empty optional fields, blank
- * paragraphs, blank service names and empty per-service links are left out.
+ * paragraphs, blank service names and empty per-service links are left out,
+ * and so are the older format's `enabled` and `archived`. `status` is always
+ * written, as "" while none is chosen, so the file shows the gap.
  */
 export function toSurveyObject(survey: DraftSurvey): Record<string, JsonValue> {
   const out: Record<string, JsonValue> = {
     id: survey.id,
-    enabled: survey.enabled,
+    status: survey.status,
+    opens: survey.opens,
+    closes: survey.closes,
   };
-  if (survey.archived) out.archived = true;
-  out.opens = survey.opens;
-  out.closes = survey.closes;
   if (survey.timezone.trim() !== "") out.timezone = survey.timezone;
   out.services = survey.allServices
     ? "all"
@@ -71,7 +73,9 @@ export function toSurveyObject(survey: DraftSurvey): Record<string, JsonValue> {
   if (survey.laterLabel !== "") out.laterLabel = survey.laterLabel;
   if (survey.dismissLabel !== "") out.dismissLabel = survey.dismissLabel;
   for (const [key, value] of Object.entries(survey.extra)) {
-    if (!KNOWN_SURVEY_KEYS.has(key)) out[key] = value;
+    if (!KNOWN_SURVEY_KEYS.has(key) && !OLDER_FORMAT_KEYS.includes(key)) {
+      out[key] = value;
+    }
   }
   return out;
 }
@@ -96,7 +100,9 @@ export function toJson(draft: Draft): string {
  * Reads config text into a draft. Fails with a line and column on a JSON
  * syntax error, and with a plain message when a known key has a type the
  * form cannot hold (for example a number as `title`). Missing keys become
- * empty fields; `validate` reports what that means for the popup.
+ * empty fields, and a missing or unknown `status` becomes "", so an older
+ * file still loads; `validate` reports what that means for the popup. The
+ * older format's `enabled` and `archived` are kept as unknown keys.
  */
 export function fromJson(text: string): FromJsonResult {
   let json: unknown;
@@ -158,12 +164,6 @@ function readSurvey(entry: unknown, index: number): DraftSurvey | string {
     fields[key] = value;
   }
 
-  for (const flag of ["enabled", "archived"] as const) {
-    if (entry[flag] !== undefined && typeof entry[flag] !== "boolean") {
-      return `${name}: "${flag}" must be true or false.`;
-    }
-  }
-
   let allServices = false;
   let services: string[] = [];
   if (entry.services === "all") {
@@ -203,8 +203,7 @@ function readSurvey(entry: unknown, index: number): DraftSurvey | string {
   return {
     key: newKey(),
     id: fields.id,
-    enabled: entry.enabled === true,
-    archived: entry.archived === true,
+    status: isSurveyStatus(entry.status) ? entry.status : "",
     opens: fields.opens,
     closes: fields.closes,
     timezone: fields.timezone,

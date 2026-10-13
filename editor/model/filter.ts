@@ -1,10 +1,11 @@
 /**
  * The survey list's search and filters. Each filter group narrows the list
  * on its own and the groups combine (all must match); an unset group means
- * "any". The UI holds the filter; this module only answers which surveys
- * match it.
+ * "any", except Status, where unset means "any but archived". The UI holds
+ * the filter; this module only answers which surveys match it.
  */
 
+import type { SurveyStatus } from "../../src/config/config.ts";
 import type { Draft, DraftSurvey } from "./draft.ts";
 import type { SurveyTiming, Validation } from "./validate.ts";
 
@@ -13,44 +14,47 @@ export interface SurveyFilter {
   /** Text to find in the id or the title, ignoring case; blank finds all. */
   search: string;
   dates?: SurveyTiming;
-  status?: "enabled" | "disabled";
-  archive?: "current" | "archived";
+  /**
+   * One status, or unset for every survey that is not archived: archived
+   * surveys are kept for the record and listed only when asked for.
+   */
+  status?: SurveyStatus;
   /** A service name; a survey for all services matches every one. */
   service?: string;
 }
 
-/** The list as it first opens: current surveys only, nothing searched. */
-export const DEFAULT_FILTER: SurveyFilter = { search: "", archive: "current" };
+/**
+ * The list as it first opens: every survey but the archived ones, nothing
+ * searched.
+ */
+export const DEFAULT_FILTER: SurveyFilter = { search: "" };
 
 /**
  * The groups set by the "Would show now" preset: the surveys the popup would
- * show at this moment, open now, enabled and not archived.
+ * show at this moment, open now and live.
  */
-export const SHOWING_NOW: Pick<SurveyFilter, "dates" | "status" | "archive"> = {
+export const SHOWING_NOW: Pick<SurveyFilter, "dates" | "status"> = {
   dates: "open",
-  status: "enabled",
-  archive: "current",
+  status: "live",
 };
 
-/** True when the Dates, Status and Archive groups equal `SHOWING_NOW`. */
+/** True when the Dates and Status groups equal `SHOWING_NOW`. */
 export function isShowingNow(filter: SurveyFilter): boolean {
   return (
-    filter.dates === SHOWING_NOW.dates &&
-    filter.status === SHOWING_NOW.status &&
-    filter.archive === SHOWING_NOW.archive
+    filter.dates === SHOWING_NOW.dates && filter.status === SHOWING_NOW.status
   );
 }
 
 /**
- * `filter` with the preset turned on (its three groups set to `SHOWING_NOW`)
- * or off (the three groups cleared to "any"). Search and service stay.
+ * `filter` with the preset turned on (its two groups set to `SHOWING_NOW`)
+ * or off (both groups cleared). Search and service stay.
  */
 export function withShowingNow(
   filter: SurveyFilter,
   on: boolean,
 ): SurveyFilter {
   if (on) return { ...filter, ...SHOWING_NOW };
-  return { ...filter, dates: undefined, status: undefined, archive: undefined };
+  return { ...filter, dates: undefined, status: undefined };
 }
 
 /** True when the filter differs from the default or searches for something. */
@@ -59,7 +63,6 @@ export function isFilterActive(filter: SurveyFilter): boolean {
     filter.search.trim() !== "" ||
     filter.dates !== DEFAULT_FILTER.dates ||
     filter.status !== DEFAULT_FILTER.status ||
-    filter.archive !== DEFAULT_FILTER.archive ||
     filter.service !== DEFAULT_FILTER.service
   );
 }
@@ -83,16 +86,9 @@ export function matchesFilter(
     return false;
   }
   if (filter.dates !== undefined && timing !== filter.dates) return false;
-  if (
-    filter.status !== undefined &&
-    survey.enabled !== (filter.status === "enabled")
-  ) {
-    return false;
-  }
-  if (
-    filter.archive !== undefined &&
-    survey.archived !== (filter.archive === "archived")
-  ) {
+  if (filter.status === undefined) {
+    if (survey.status === "archived") return false;
+  } else if (survey.status !== filter.status) {
     return false;
   }
   // "all" matches any name a host sends, a learned one too.

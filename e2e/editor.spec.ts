@@ -79,6 +79,26 @@ function surveyForms(page: Page) {
   return page.locator(".editor-form").getByRole("region");
 }
 
+/**
+ * The Status toggle buttons of the survey form with `id`. In single
+ * selection React Aria gives the group the radiogroup role and each button
+ * the radio role, so "pressed" reads as checked.
+ */
+function statusGroup(page: Page, id: string) {
+  return surveyForm(page, id).getByRole("radiogroup", { name: "Status" });
+}
+
+/** Presses the `label` button among the Status buttons of the survey `id`. */
+async function chooseStatus(
+  page: Page,
+  id: string,
+  label: string,
+): Promise<void> {
+  await statusGroup(page, id)
+    .getByRole("radio", { name: label, exact: true })
+    .click();
+}
+
 /** Replaces the template survey's dates with ones in January 2026. */
 async function closeTemplateSurvey(page: Page): Promise<void> {
   await openTab(page, /^JSON$/);
@@ -112,7 +132,7 @@ test("the start screen explains the four ways to start", async ({ page }) => {
     ],
     [
       "Start from the template",
-      "One disabled survey with the standard wording. Use it for the first survey, or to start over.",
+      "One draft survey with the standard wording. Use it for the first survey, or to start over.",
       "Start from template",
     ],
   ] as const;
@@ -181,10 +201,10 @@ test("downloads the draft as surveys.json", async ({ page }) => {
   expect(text).toContain('\n  "surveys": [\n    {\n      "id": "nectar-2026",');
   const json = JSON.parse(text);
   expect(json.surveys[0].title).toBe("How was {service}?");
-  expect(json.surveys[0].enabled).toBe(false);
+  expect(json.surveys[0].status).toBe("draft");
   expect(Object.keys(json.surveys[0])).toEqual([
     "id",
-    "enabled",
+    "status",
     "opens",
     "closes",
     "timezone",
@@ -376,9 +396,9 @@ test("a chosen filter lists only matching surveys but keeps the selected one", a
   // Choosing the chip again clears it; Clear filters resets every group.
   await chip(page, "Closed").click();
   await expect(countLine(page)).toHaveText("3 of 3 match");
-  await chip(page, "Disabled").click();
+  await chip(page, "Draft").click();
   await expect(countLine(page)).toHaveText("3 of 3 match");
-  await chip(page, "Enabled").click();
+  await chip(page, "Live").click();
   await expect(countLine(page)).toHaveText("0 of 3 match");
   await nav(page).getByRole("button", { name: "Clear filters" }).click();
   await expect(countLine(page)).toHaveText("3 of 3 match");
@@ -387,7 +407,7 @@ test("a chosen filter lists only matching surveys but keeps the selected one", a
   ).toHaveCount(0);
 });
 
-test("Would show now lists what the popup would show and sets three groups", async ({
+test("Would show now lists what the popup would show and sets two groups", async ({
   page,
 }) => {
   // Inside the template's dates, so the template survey is open now.
@@ -396,7 +416,7 @@ test("Would show now lists what the popup would show and sets three groups", asy
   await openTab(page, /^JSON$/);
   const raw = page.getByRole("textbox", { name: "surveys.json" });
   await raw.fill(
-    (await raw.inputValue()).replace('"enabled": false', '"enabled": true'),
+    (await raw.inputValue()).replace('"status": "draft"', '"status": "live"'),
   );
   await nav(page).getByRole("button", { name: "Add survey" }).click();
   await row(page, "nectar-2026").click();
@@ -406,14 +426,14 @@ test("Would show now lists what the popup would show and sets three groups", asy
   await expect(countLine(page)).toHaveText("1 of 2 match");
   await expect(row(page, "nectar-2026")).toBeVisible();
   await expect(row(page, "survey-1")).toHaveCount(0);
-  for (const name of ["Would show now", "Open now", "Enabled", "Current"]) {
+  for (const name of ["Would show now", "Open now", "Live"]) {
     await expect(chip(page, name)).toHaveAttribute("aria-selected", "true");
   }
 
-  // Choosing it again clears all three groups to any.
+  // Choosing it again clears both groups.
   await chip(page, "Would show now").click();
   await expect(countLine(page)).toHaveText("2 of 2 match");
-  for (const name of ["Would show now", "Open now", "Enabled", "Current"]) {
+  for (const name of ["Would show now", "Open now", "Live"]) {
     await expect(chip(page, name)).toHaveAttribute("aria-selected", "false");
   }
 });
@@ -470,17 +490,19 @@ test("a closed survey suggests archiving; the Archived chip lists archived surve
   await closeTemplateSurvey(page);
   const raw = page.getByRole("textbox", { name: "surveys.json" });
   await expect(survey.getByText("Closed", { exact: true })).toBeVisible();
-  await expect(survey.getByText(/This survey has closed/)).toBeVisible();
+  await expect(
+    survey.getByText(/This survey has closed. Set its status to Archived/),
+  ).toBeVisible();
   await expect(summary(page)).toHaveText("No problems found.");
 
-  // Archive writes it to the file; it stays shown while it is selected,
-  // although the default Current chip no longer counts it.
-  await survey
-    .getByRole("button", { name: "Archive nectar-2026" })
-    .first()
-    .click();
-  await expect(raw).toHaveValue(/"archived": true/);
+  // Choosing Archived writes it to the file; it stays shown while it is
+  // selected, although the default filter no longer counts it.
+  await chooseStatus(page, "nectar-2026", "Archived");
+  await expect(raw).toHaveValue(/"status": "archived"/);
   await expect(survey).toBeVisible();
+  await expect(
+    survey.getByText("Kept in the file for the record; never shown."),
+  ).toBeVisible();
   await expect(survey.getByText(/This survey has closed/)).toHaveCount(0);
   await expect(row(page, "nectar-2026")).toContainText("Archived");
   await expect(countLine(page)).toHaveText("0 of 1 match");
@@ -495,14 +517,13 @@ test("a closed survey suggests archiving; the Archived chip lists archived surve
   await expect(countLine(page)).toHaveText("1 of 1 match");
   await expect(removeArchived).toBeVisible();
 
-  // Unarchive brings it back; Remove archived surveys empties the draft.
-  await survey.getByRole("button", { name: "Unarchive nectar-2026" }).click();
+  // Back to Draft takes it off the record; Remove archived surveys then
+  // empties the draft once it is archived again.
+  await chooseStatus(page, "nectar-2026", "Draft");
   await expect(raw).not.toHaveValue(/"archived"/);
+  await expect(row(page, "nectar-2026")).toContainText("Draft");
   await expect(removeArchived).toHaveCount(0);
-  await survey
-    .getByRole("button", { name: "Archive nectar-2026" })
-    .first()
-    .click();
+  await chooseStatus(page, "nectar-2026", "Archived");
   await removeArchived.click();
   await page
     .getByRole("alertdialog", { name: "Remove 1 archived survey?" })
@@ -515,6 +536,67 @@ test("a closed survey suggests archiving; the Archived chip lists archived surve
   ).toBeVisible();
   await expect(surveyForms(page)).toHaveCount(0);
   await expect(raw).toHaveValue(/"surveys": \[\]/);
+});
+
+test("a file in the older format waits for a person to choose a status", async ({
+  page,
+}) => {
+  // Inside the survey's dates, so the only problems are about the status.
+  await page.clock.setFixedTime(new Date("2026-10-20T10:00:00+11:00"));
+  await page.goto("/editor.html");
+  await page.getByRole("button", { name: "Paste JSON" }).click();
+  await page
+    .getByRole("textbox", { name: "Contents of a surveys.json file" })
+    .fill(
+      JSON.stringify({
+        surveys: [
+          {
+            id: "nectar-2026",
+            enabled: true,
+            opens: "2026-10-13T00:00",
+            closes: "2026-11-14T23:59",
+            services: "all",
+            title: TEMPLATE_TITLE,
+            url: "https://example.com/survey",
+          },
+        ],
+      }),
+    );
+  await page.getByRole("button", { name: "Load pasted JSON" }).click();
+
+  // The file loads, with no status chosen: no button pressed, an error, and
+  // the download off.
+  const survey = surveyForm(page, "nectar-2026");
+  const group = statusGroup(page, "nectar-2026");
+  await expect(group.getByRole("radio")).toHaveCount(3);
+  for (const radio of await group.getByRole("radio").all()) {
+    await expect(radio).not.toBeChecked();
+  }
+  await expect(group).toHaveAttribute("aria-invalid", "true");
+  await expect(group).toHaveAccessibleDescription(/Choose a status\.$/);
+  await expect(survey.getByText("Choose a status.")).toBeVisible();
+  await expect(summary(page)).toHaveText("1 error and 1 warning.");
+  await expect(downloadButton(page)).toBeDisabled();
+  await openTab(page, /^Problems/);
+  const panel = page.getByRole("tabpanel");
+  await expect(
+    panel.getByText(
+      'Unknown key "enabled" (older format; choose a Status instead). The download leaves it out.',
+    ),
+  ).toBeVisible();
+
+  // Choosing a status clears both, and the file carries the status alone.
+  await chooseStatus(page, "nectar-2026", "Live");
+  await expect(
+    group.getByRole("radio", { name: "Live", exact: true }),
+  ).toBeChecked();
+  await expect(group).not.toHaveAttribute("aria-invalid");
+  await expect(summary(page)).toHaveText("No problems found.");
+  await expect(downloadButton(page)).toBeEnabled();
+  await openTab(page, /^JSON$/);
+  const raw = page.getByRole("textbox", { name: "surveys.json" });
+  await expect(raw).toHaveValue(/"id": "nectar-2026",\n\s+"status": "live",/);
+  await expect(raw).not.toHaveValue(/"enabled"/);
 });
 
 test("a date can be typed one segment at a time", async ({ page }) => {

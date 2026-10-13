@@ -62,13 +62,6 @@ export function SelectedSurvey({
               dispatch({ type: "move-survey", index, offset })
             }
             onDuplicate={() => dispatch({ type: "duplicate-survey", index })}
-            onArchive={(archive) =>
-              dispatch({
-                type: "update-survey",
-                index,
-                patch: { archived: archive },
-              })
-            }
             onRemove={() => setIsRemoving(true)}
           />
         </div>

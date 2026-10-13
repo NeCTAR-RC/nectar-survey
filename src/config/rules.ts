@@ -19,7 +19,7 @@ export interface RuleContext {
 
 export type SkipReason =
   | "archived"
-  | "disabled"
+  | "draft"
   | "closed"
   | "service"
   | "no-url"
@@ -30,17 +30,17 @@ export type SkipReason =
 /**
  * Returns why `survey` would not be shown right now, or undefined when it
  * should be shown. Checks run in this order and the first failing one is
- * returned: archived, not enabled, outside its dates, not for this service,
- * no usable url for this service, dismissed, clicked (approach 1: a click
- * counts as done), already shown today in the survey's time zone. Only this
- * survey's own stored state is read.
+ * returned: archived, not live (a draft), outside its dates, not for this
+ * service, no usable url for this service, dismissed, clicked (approach 1: a
+ * click counts as done), already shown today in the survey's time zone. Only
+ * this survey's own stored state is read.
  */
 export function skipReason(
   survey: Survey,
   ctx: RuleContext,
 ): SkipReason | undefined {
-  if (survey.archived) return "archived";
-  if (!survey.enabled) return "disabled";
+  if (survey.status === "archived") return "archived";
+  if (survey.status !== "live") return "draft";
   if (!isOpen(survey, ctx.now)) return "closed";
   if (!servicesMatch(survey, ctx.service)) return "service";
   if (resolveSurveyUrl(survey, ctx.service) === undefined) return "no-url";

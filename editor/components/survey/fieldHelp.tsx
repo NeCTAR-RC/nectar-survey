@@ -39,6 +39,29 @@ export function help(
   );
 }
 
+/**
+ * Help text with its warnings for a control of our own markup, which has no
+ * description slot: a paragraph the control points at with
+ * `aria-describedby={id}`. A plain function like `help`, so this module
+ * exports no components.
+ */
+export function helpParagraph(
+  id: string,
+  hint: ReactNode,
+  warnings: string[],
+): ReactNode {
+  return (
+    <p id={id} className="field-help">
+      {hint}
+      {warnings.map((warning) => (
+        <span className="field-warning" key={warning}>
+          {warning}
+        </span>
+      ))}
+    </p>
+  );
+}
+
 /** Replaces one item of a list, leaving the others as they are. */
 export function replaceAt<T>(list: T[], position: number, value: T): T[] {
   return list.map((item, i) => (i === position ? value : item));

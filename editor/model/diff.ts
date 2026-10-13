@@ -5,6 +5,7 @@
 
 import {
   isRecord,
+  OLDER_FORMAT_KEYS,
   type Draft,
   type DraftSurvey,
   type JsonValue,
@@ -50,8 +51,8 @@ export function diff(live: Draft | null, draft: Draft): DraftDiff {
       return;
     }
     matched.add(match);
-    const from = displayFields(match);
-    const to = displayFields(survey);
+    const from = displayFields(liveSurveyObject(match));
+    const to = displayFields(toSurveyObject(survey));
     const liveIndex = liveSurveys.indexOf(match);
     if (liveIndex !== index) {
       from.set("position", String(liveIndex + 1));
@@ -84,10 +85,22 @@ export function diff(live: Draft | null, draft: Draft): DraftDiff {
   return { added, removed, changes };
 }
 
+/**
+ * A live survey as its file holds it: what the editor would write, plus the
+ * older format's keys it read but never writes, so the diff shows them go.
+ */
+function liveSurveyObject(survey: DraftSurvey): Record<string, JsonValue> {
+  const out = toSurveyObject(survey);
+  for (const key of OLDER_FORMAT_KEYS) {
+    if (Object.hasOwn(survey.extra, key)) out[key] = survey.extra[key];
+  }
+  return out;
+}
+
 /** A survey's fields as display text, keyed by the name the diff shows. */
-function displayFields(survey: DraftSurvey): Map<string, string> {
+function displayFields(survey: Record<string, JsonValue>): Map<string, string> {
   const fields = new Map<string, string>();
-  for (const [key, value] of Object.entries(toSurveyObject(survey))) {
+  for (const [key, value] of Object.entries(survey)) {
     if (key === "body" && Array.isArray(value)) {
       value.forEach((paragraph, index) =>
         fields.set(`body paragraph ${index + 1}`, displayValue(paragraph)),

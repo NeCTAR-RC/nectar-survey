@@ -41,7 +41,7 @@ export function StartPanel({ live, onLoad }: StartPanelProps) {
       route: "template",
       title: "Start from the template",
       description:
-        "One disabled survey with the standard wording. Use it for the first survey, or to start over.",
+        "One draft survey with the standard wording. Use it for the first survey, or to start over.",
       action: "Start from template",
     },
   ];

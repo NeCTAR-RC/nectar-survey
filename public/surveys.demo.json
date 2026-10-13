@@ -2,7 +2,7 @@
   "surveys": [
     {
       "id": "nectar-2026",
-      "enabled": true,
+      "status": "live",
       "opens": "2026-10-13T00:00",
       "closes": "2026-11-14T23:59",
       "timezone": "Australia/Melbourne",

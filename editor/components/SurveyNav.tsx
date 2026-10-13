@@ -11,6 +11,7 @@ import {
   TagList,
 } from "@ardc-ui/react";
 import { useState } from "react";
+import { SURVEY_STATUSES, type SurveyStatus } from "../../src/config/config.ts";
 import {
   DEFAULT_FILTER,
   errorCounts,
@@ -18,6 +19,7 @@ import {
   isFilterActive,
   isShowingNow,
   serviceNames,
+  STATUS_TEXT,
   withShowingNow,
   type Draft,
   type DraftSurvey,
@@ -59,17 +61,11 @@ const DATES_CHOICES: Choice<SurveyTiming>[] = [
   { id: "closed", label: "Closed" },
 ];
 
-const STATUS_CHOICES: Choice<"enabled" | "disabled">[] = [
-  { id: "enabled", label: "Enabled" },
-  { id: "disabled", label: "Disabled" },
-];
+const STATUS_CHOICES: Choice<SurveyStatus>[] = SURVEY_STATUSES.map(
+  (status) => ({ id: status, label: STATUS_TEXT[status].label }),
+);
 
-const ARCHIVE_CHOICES: Choice<"current" | "archived">[] = [
-  { id: "current", label: "Current" },
-  { id: "archived", label: "Archived" },
-];
-
-/** Between the words of a row's states line: "Disabled · Upcoming". */
+/** Between the words of a row's states line: "Draft · Upcoming". */
 const STATE_SEPARATOR = " · ";
 
 /** The Service select's key for "no service chosen". */
@@ -84,14 +80,14 @@ const ANY_SERVICE = "any";
  * then shows on its own.
  *
  * The selected survey is always listed, even when it stops matching the
- * filters or the search: editing a survey (closing it, disabling it,
- * changing its title) must never make the form jump to another one. When it
+ * filters or the search: editing a survey (closing it, changing its status
+ * or its title) must never make the form jump to another one. When it
  * does not match, it comes after the matches under the caption "Selected,
  * outside the filter", so it never reads as a result. The count line counts
  * the matches only, without that pinned row.
  *
- * While archived surveys are listed and any exist, "Remove archived surveys"
- * under the list removes them all after a confirmation.
+ * While the Archived filter is chosen and archived surveys exist, "Remove
+ * archived surveys" under the list removes them all after a confirmation.
  */
 export function SurveyNav({
   draft,
@@ -112,10 +108,10 @@ export function SurveyNav({
       : undefined;
   const errors = errorCounts(validation, count);
   const archived = draft.surveys.flatMap((survey, index) =>
-    survey.archived ? [index] : [],
+    survey.status === "archived" ? [index] : [],
   );
   const offersRemoveArchived =
-    filter.archive !== "current" && archived.length > 0;
+    filter.status === "archived" && archived.length > 0;
 
   const update = (patch: Partial<SurveyFilter>): void =>
     onFilterChange({ ...filter, ...patch });
@@ -180,12 +176,6 @@ export function SurveyNav({
             choices={STATUS_CHOICES}
             value={filter.status}
             onChange={(status) => update({ status })}
-          />
-          <ChoiceGroup
-            label="Archive"
-            choices={ARCHIVE_CHOICES}
-            value={filter.archive}
-            onChange={(archive) => update({ archive })}
           />
           <Select
             labelPosition="top"
@@ -327,8 +317,8 @@ interface SurveyRowProps {
 
 /**
  * One survey in the list: its number in the file and its id, its title on
- * one line, and a line of words only for what needs noticing (off, not open,
- * archived, errors).
+ * one line, and a line of words only for what needs noticing (a draft, not
+ * open, archived, errors). A live survey has no status word.
  */
 function SurveyRow({
   survey,
@@ -339,10 +329,10 @@ function SurveyRow({
   onSelect,
 }: SurveyRowProps) {
   const states = [
-    !survey.enabled && "Disabled",
+    survey.status === "draft" && STATUS_TEXT.draft.label,
     timing === "closed" && "Closed",
     timing === "upcoming" && "Upcoming",
-    survey.archived && "Archived",
+    survey.status === "archived" && STATUS_TEXT.archived.label,
   ].filter((state) => state !== false);
   const errors = errorCount > 0 ? plural(errorCount, "error") : undefined;
 

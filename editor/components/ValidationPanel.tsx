@@ -127,7 +127,7 @@ function issueLocation(
 
 const FIELD_NAMES: Record<string, string> = {
   id: "Id",
-  enabled: "Enabled",
+  status: "Status",
   opens: "Opens",
   closes: "Closes",
   timezone: "Time zone",

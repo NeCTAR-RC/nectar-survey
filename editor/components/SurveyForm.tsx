@@ -1,6 +1,7 @@
 import { Alert, Badge, Button } from "@ardc-ui/react";
 import {
   fieldDomId,
+  STATUS_TEXT,
   surveyName,
   type DraftSurvey,
   type FieldIssues,
@@ -25,8 +26,6 @@ interface SurveyFormProps {
   onChange: (patch: Partial<DraftSurvey>) => void;
   onMove: (offset: -1 | 1) => void;
   onDuplicate: () => void;
-  /** Archives (true) or unarchives (false) the survey. */
-  onArchive: (archive: boolean) => void;
   onRemove: () => void;
 }
 
@@ -46,7 +45,6 @@ export function SurveyForm({
   onChange,
   onMove,
   onDuplicate,
-  onArchive,
   onRemove,
 }: SurveyFormProps) {
   const name = surveyName(survey);
@@ -71,7 +69,9 @@ export function SurveyForm({
       <header className="survey-header">
         <div className="survey-title">
           <h2 id={headingId}>{survey.id !== "" ? survey.id : "No id yet"}</h2>
-          <Badge>{survey.enabled ? "Enabled" : "Disabled"}</Badge>
+          {survey.status !== "" && (
+            <Badge>{STATUS_TEXT[survey.status].label}</Badge>
+          )}
           {isClosed && <Badge>Closed</Badge>}
         </div>
         <div
@@ -106,14 +106,6 @@ export function SurveyForm({
             Duplicate
           </Button>
           <Button
-            variant="link"
-            size="sm"
-            onPress={() => onArchive(!survey.archived)}
-            aria-label={`${survey.archived ? "Unarchive" : "Archive"} ${name}`}
-          >
-            {survey.archived ? "Unarchive" : "Archive"}
-          </Button>
-          <Button
             variant="secondary"
             tone="danger"
             size="sm"
@@ -125,18 +117,10 @@ export function SurveyForm({
         </div>
       </header>
 
-      {isClosed && !survey.archived && (
+      {isClosed && survey.status !== "archived" && (
         <Alert tone="info">
-          This survey has closed. Archive it to keep it in the file as a record
-          and out of the way.{" "}
-          <Button
-            variant="link"
-            size="sm"
-            onPress={() => onArchive(true)}
-            aria-label={`Archive ${name}`}
-          >
-            Archive
-          </Button>
+          This survey has closed. Set its status to Archived to keep it in the
+          file as a record and out of the way.
         </Alert>
       )}
 

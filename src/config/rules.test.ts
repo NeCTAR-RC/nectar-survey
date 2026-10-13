@@ -6,12 +6,12 @@ import type { SurveyState } from "./storage.ts";
 // 02:00 UTC on 20 Oct is 13:00 AEDT on 20 Oct, inside the survey dates.
 const NOW = new Date("2026-10-20T02:00:00Z");
 const TODAY = "2026-10-20";
+const AFTER_CLOSING = new Date("2026-11-15T02:00:00Z");
 
 function survey(overrides: Partial<Survey> = {}): Survey {
   return {
     id: "s",
-    enabled: true,
-    archived: false,
+    status: "live",
     opens: "2026-10-13T00:00",
     closes: "2026-11-14T23:59",
     timezone: "Australia/Melbourne",
@@ -44,14 +44,25 @@ describe("skipReason", () => {
   });
 
   it("is archived before anything else is looked at", () => {
-    expect(skipReason(survey({ archived: true }), context())).toBe("archived");
+    expect(skipReason(survey({ status: "archived" }), context())).toBe(
+      "archived",
+    );
     expect(
-      skipReason(survey({ archived: true, enabled: false }), context()),
+      skipReason(
+        survey({ status: "archived", services: [], url: undefined }),
+        context({ s: { dismissed: true } }, { now: AFTER_CLOSING }),
+      ),
     ).toBe("archived");
   });
 
-  it("is disabled when enabled is false", () => {
-    expect(skipReason(survey({ enabled: false }), context())).toBe("disabled");
+  it("is draft when the status is draft, before the dates are looked at", () => {
+    expect(skipReason(survey({ status: "draft" }), context())).toBe("draft");
+    expect(
+      skipReason(
+        survey({ status: "draft" }),
+        context({}, { now: AFTER_CLOSING }),
+      ),
+    ).toBe("draft");
   });
 
   it("is closed before opens and after closes", () => {
@@ -88,7 +99,7 @@ describe("skipReason", () => {
       surveys: [
         {
           id: "s",
-          enabled: true,
+          status: "live",
           opens: "2026-10-13",
           closes: "2026-11-14",
           services: "all",
@@ -190,12 +201,12 @@ describe("selectSurvey", () => {
   });
 
   it("skips surveys with a skip reason", () => {
-    const disabled = survey({ id: "disabled", enabled: false });
+    const draft = survey({ id: "draft", status: "draft" });
     const clicked = survey({ id: "clicked" });
     const other = survey({ id: "other" });
     expect(
       selectSurvey(
-        [disabled, clicked, other],
+        [draft, clicked, other],
         context({ clicked: { clicked: true } }),
       ),
     ).toBe(other);
@@ -204,7 +215,7 @@ describe("selectSurvey", () => {
   it("returns undefined when every survey is skipped", () => {
     expect(
       selectSurvey(
-        [survey({ enabled: false }), survey({ id: "t", services: [] })],
+        [survey({ status: "draft" }), survey({ id: "t", services: [] })],
         context(),
       ),
     ).toBeUndefined();

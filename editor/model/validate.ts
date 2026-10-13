@@ -22,6 +22,7 @@ import {
 import {
   effectiveServices,
   isKnownService,
+  OLDER_FORMAT_KEYS,
   serviceNames,
   type Draft,
   type DraftSurvey,
@@ -63,9 +64,10 @@ const SERVICE_PLACEHOLDER = "{service}";
  * Checks the draft against the popup's own rules and adds warnings.
  *
  * Errors are everything that makes the popup skip a survey (the same
- * conditions as `parseConfig`, placed on the field at fault), plus an unknown
- * time zone (the popup would silently use Melbourne), a link that is not an
- * http(s) address, and a repeated id (surveys would share one saved state).
+ * conditions as `parseConfig`, placed on the field at fault, a status not
+ * chosen yet among them), plus an unknown time zone (the popup would
+ * silently use Melbourne), a link that is not an http(s) address, and a
+ * repeated id (surveys would share one saved state).
  * Warnings are listed in `surveyWarnings` and `crossSurveyWarnings`.
  * `now` sets the current time for each survey's `timing` and for the "more
  * than a year away" warning.
@@ -103,7 +105,7 @@ export function validate(draft: Draft, now: Date = new Date()): Validation {
     timing.push(result && surveyTiming(result, now));
     // An archived survey is out of play, so nothing about it is "probably
     // not what was meant"; its errors still count, since the popup parses it.
-    if (!survey.archived) {
+    if (survey.status !== "archived") {
       warnings.push(
         ...surveyWarnings(survey, result, now, names).map((issue) => ({
           surveyIndex,
@@ -144,6 +146,9 @@ function fieldErrors(survey: DraftSurvey, names: readonly string[]): Issue[] {
   const issues: Issue[] = [];
   if (survey.id.trim() === "") {
     issues.push({ field: "id", message: "Enter an id, such as nectar-2026." });
+  }
+  if (survey.status === "") {
+    issues.push({ field: "status", message: "Choose a status." });
   }
   if (survey.title.trim() === "") {
     issues.push({ field: "title", message: "Enter a title." });
@@ -202,8 +207,7 @@ function boundaryMessage(boundary: Boundary, survey: DraftSurvey): string {
 export function isUsableUrl(url: string): boolean {
   const probe: Survey = {
     id: "",
-    enabled: true,
-    archived: false,
+    status: "live",
     opens: "",
     closes: "",
     timezone: DEFAULT_TIMEZONE,
@@ -241,7 +245,7 @@ function surveyWarnings(
     });
   }
 
-  if (parsed && parsed.enabled) {
+  if (parsed?.status === "live") {
     const missing = effectiveServices(survey, names).filter(
       (service) => resolveSurveyUrl(parsed, service) === undefined,
     );
@@ -252,7 +256,7 @@ function surveyWarnings(
       issues.push({
         field: "url",
         message:
-          "This survey is enabled but has no survey link, so the popup does not show it anywhere.",
+          "This survey is live but has no survey link, so the popup does not show it anywhere.",
       });
     } else {
       for (const service of missing) {
@@ -318,15 +322,23 @@ function surveyWarnings(
   });
 
   for (const key of Object.keys(survey.extra)) {
-    issues.push({
-      message: `Unknown key "${key}". It is kept in the file, but the popup ignores it.`,
-    });
+    // An older-format key sits on Status, the field that replaces it.
+    issues.push(
+      OLDER_FORMAT_KEYS.includes(key)
+        ? {
+            field: "status",
+            message: `Unknown key "${key}" (older format; choose a Status instead). The download leaves it out.`,
+          }
+        : {
+            message: `Unknown key "${key}". It is kept in the file, but the popup ignores it.`,
+          },
+    );
   }
   return issues;
 }
 
 /**
- * Warns about enabled surveys that run for the same service at the same
+ * Warns about live surveys that run for the same service at the same
  * time. The popup shows the first one in the list; a later one only reaches
  * people who have already started or dismissed the earlier one. Surveys are
  * named by id, which is unique here: a survey that repeats an earlier id has
@@ -339,10 +351,10 @@ function crossSurveyWarnings(
 ): Issue[] {
   const issues: Issue[] = [];
   parsed.forEach((later, laterIndex) => {
-    if (!later?.enabled || later.archived) return;
+    if (later?.status !== "live") return;
     for (let earlierIndex = 0; earlierIndex < laterIndex; earlierIndex++) {
       const earlier = parsed[earlierIndex];
-      if (!earlier?.enabled || earlier.archived) continue;
+      if (earlier?.status !== "live") continue;
       if (earlier.opens > later.closes || later.opens > earlier.closes) {
         continue;
       }

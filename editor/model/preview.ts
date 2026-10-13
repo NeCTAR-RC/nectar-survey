@@ -14,7 +14,12 @@ import {
   type RuleContext,
   type SkipReason,
 } from "../../src/config/rules.ts";
-import { isRecord, type Draft, type JsonValue } from "./draft.ts";
+import {
+  isRecord,
+  type Draft,
+  type DraftSurvey,
+  type JsonValue,
+} from "./draft.ts";
 import { toConfigObject } from "./json.ts";
 import { isUsableUrl } from "./validate.ts";
 
@@ -35,7 +40,7 @@ export interface PreviewOutcome {
 
 const SKIP_REASONS: Record<SkipReason, string> = {
   archived: "archived",
-  disabled: "not enabled",
+  draft: "a draft, not live",
   closed: "not open on this date",
   service: "not for this service",
   "no-url": "no survey link for this service",
@@ -81,9 +86,10 @@ export function previewOutcome(
 }
 
 /**
- * The config the preview mounts. With `asIfLive`, every survey is enabled and
- * one without a usable shared link gets a sample one, so a draft can be
- * previewed before the real links exist; per-service links are kept.
+ * The config the preview mounts. With `asIfLive`, every survey that is not
+ * archived is live and one without a usable shared link gets a sample one,
+ * so a draft can be previewed before the real links exist; per-service links
+ * are kept, and archived surveys stay out of play as they are for users.
  */
 export function previewConfig(
   draft: Draft,
@@ -92,9 +98,9 @@ export function previewConfig(
   if (!asIfLive) return toConfigObject(draft);
   return toConfigObject({
     ...draft,
-    surveys: draft.surveys.map((survey) => ({
+    surveys: draft.surveys.map((survey): DraftSurvey => ({
       ...survey,
-      enabled: true,
+      status: survey.status === "archived" ? "archived" : "live",
       url: isUsableUrl(survey.url) ? survey.url : SAMPLE_SURVEY_URL,
     })),
   });
