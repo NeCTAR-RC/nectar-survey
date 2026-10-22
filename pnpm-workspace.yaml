@@ -1,7 +1,13 @@
-onlyBuiltDependencies:
-  - '@parcel/watcher'
-  - esbuild
+allowBuilds:
+  '@parcel/watcher': true
+  esbuild: true
 
 # React, React DOM and React Aria Components are direct dependencies, so a
 # peer that goes unmet is a mistake to report, never one to install quietly.
 autoInstallPeers: false
+
+# pnpm holds back versions younger than one day (minimumReleaseAge). Our own
+# library is published to Verdaccio by CI on merge, and an uplift takes it the
+# same day, so the ARDC packages are exempt.
+minimumReleaseAgeExclude:
+  - '@ardc-ui/*'

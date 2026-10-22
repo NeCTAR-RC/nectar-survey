@@ -99,7 +99,7 @@ Three text fields, `eyebrow`, `title` and `body`, can hold the placeholder `{ser
 
 ## Local development
 
-Requires Node 24 and pnpm. The `@ardc-ui` packages come from the ARDC Verdaccio registry set in `.npmrc`.
+Requires pnpm 10 or later on your `PATH` (for example `brew install pnpm`); `pnpm install` then provides the pnpm and Node versions this repo pins. The `@ardc-ui` packages come from the ARDC Verdaccio registry set in `.npmrc`.
 
 ```bash
 pnpm install            # Install dependencies and the git hooks
