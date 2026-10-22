@@ -42,6 +42,8 @@ export interface PreviewOutcome {
 
 const SKIP_REASONS: Record<SkipReason, string> = {
   archived: "archived",
+  "preview-mode":
+    "not a preview survey, so not shown on pages opened with ?nectar-survey=preview",
   preview: "preview only, shown on pages opened with ?nectar-survey=preview",
   draft: "a draft, not live",
   closed: "not open on this date",

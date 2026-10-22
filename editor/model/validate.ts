@@ -343,8 +343,8 @@ function surveyWarnings(
  * Warns about live surveys that run for the same service at the same
  * time. The popup shows the first one in the list; a later one only reaches
  * people who have already started or dismissed the earlier one. Preview
- * surveys are left out: users never see them, and in preview mode they go
- * first and keep no saved state, so they hide nothing. Surveys are
+ * surveys are left out: users never see them, and in preview mode nothing
+ * else shows and they keep no saved state, so they hide nothing. Surveys are
  * named by id, which is unique here: a survey that repeats an earlier id has
  * an error, so it is never parsed and never reaches this check.
  */

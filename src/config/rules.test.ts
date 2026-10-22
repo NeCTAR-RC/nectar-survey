@@ -244,15 +244,19 @@ describe("skipReason for preview surveys", () => {
     expect(readState).not.toHaveBeenCalled();
   });
 
-  it("leaves draft and live surveys as they are in preview mode", () => {
-    expect(skipReason(survey({ status: "draft" }), inPreview())).toBe("draft");
-    expect(skipReason(survey(), inPreview())).toBeUndefined();
-    expect(skipReason(survey(), inPreview({ s: { dismissed: true } }))).toBe(
-      "dismissed",
+  it("is preview-mode for draft and live surveys in preview mode", () => {
+    expect(skipReason(survey({ status: "draft" }), inPreview())).toBe(
+      "preview-mode",
     );
-    expect(skipReason(survey(), inPreview({ s: { shownOn: TODAY } }))).toBe(
-      "shown-today",
+    expect(skipReason(survey(), inPreview())).toBe("preview-mode");
+  });
+
+  it("never reads a live survey's stored state in preview mode", () => {
+    const readState = vi.fn(() => ({ dismissed: true }));
+    expect(skipReason(survey(), inPreview({}, { readState }))).toBe(
+      "preview-mode",
     );
+    expect(readState).not.toHaveBeenCalled();
   });
 });
 
@@ -280,7 +284,7 @@ describe("selectSurvey", () => {
     ).toBe(other);
   });
 
-  it("tries preview surveys first in preview mode, each group in config order", () => {
+  it("considers only preview surveys in preview mode, in config order", () => {
     const live = survey({ id: "live" });
     const firstUnderTest = survey({ id: "first-preview", status: "preview" });
     const secondUnderTest = survey({ id: "second-preview", status: "preview" });
@@ -292,19 +296,37 @@ describe("selectSurvey", () => {
     ).toBe(firstUnderTest);
     expect(
       selectSurvey(
-        [
-          live,
-          survey({ id: "linkless-preview", status: "preview", url: undefined }),
-        ],
+        [live, secondUnderTest, firstUnderTest],
         context({}, { preview: true }),
       ),
-    ).toBe(live);
+    ).toBe(secondUnderTest);
   });
 
-  it("picks live surveys as before outside preview mode", () => {
+  it("never picks an open live survey in preview mode", () => {
     const live = survey({ id: "live" });
+    const linkless = survey({
+      id: "linkless-preview",
+      status: "preview",
+      url: undefined,
+    });
+    expect(
+      selectSurvey([live, linkless], context({}, { preview: true })),
+    ).toBeUndefined();
+    expect(
+      selectSurvey([live], context({}, { preview: true })),
+    ).toBeUndefined();
+  });
+
+  it("skips preview surveys and picks live ones in config order outside preview mode", () => {
+    const firstLive = survey({ id: "first-live" });
+    const secondLive = survey({ id: "second-live" });
     const underTest = survey({ id: "preview", status: "preview" });
-    expect(selectSurvey([underTest, live], context())).toBe(live);
+    expect(selectSurvey([underTest, firstLive, secondLive], context())).toBe(
+      firstLive,
+    );
+    expect(selectSurvey([underTest, secondLive, firstLive], context())).toBe(
+      secondLive,
+    );
     expect(selectSurvey([underTest], context())).toBeUndefined();
   });
 

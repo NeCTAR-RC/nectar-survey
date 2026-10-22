@@ -553,13 +553,69 @@ test.describe("preview mode", () => {
     return lines;
   }
 
-  test("shows a preview survey before the live one", async ({ page }) => {
+  /** Keys the popup has written to localStorage. */
+  async function storedKeys(page: Page): Promise<string[]> {
+    const keys = await page.evaluate(() => Object.keys(localStorage));
+    return keys.filter((key) => key.startsWith("nectar-survey:"));
+  }
+
+  /** Serves the demo config with only its live surveys. */
+  async function serveLiveSurveysOnly(page: Page): Promise<void> {
+    await page.route("**/surveys.demo.json", async (route) => {
+      const response = await route.fetch();
+      const config = await response.json();
+      config.surveys = config.surveys.filter(
+        (survey: { status?: string }) => survey.status !== "preview",
+      );
+      await route.fulfill({ response, json: config });
+    });
+  }
+
+  test("shows only the preview survey in preview mode", async ({ page }) => {
     const debug = watchDebug(page);
     await open(page, `now=${TODAY}&nectar-survey=preview`);
     const dialog = previewDialog(page);
     await expect(dialog).toBeVisible();
     await expect(dialog).toHaveAccessibleName(PREVIEW_TITLE);
+    await expect(surveyDialog(page)).toHaveCount(0);
     expect(debug).toContain("nectar-survey: preview mode on");
+  });
+
+  test("shows no live survey in preview mode and logs the preview-mode reason", async ({
+    page,
+  }) => {
+    await serveLiveSurveysOnly(page);
+    const debug = watchDebug(page);
+    await open(page, `now=${TODAY}&nectar-survey=preview`);
+    await expectNoDialog(page);
+    expect(debug.at(-1)).toBe(
+      `nectar-survey: no survey to show (${SURVEY_ID} preview-mode)`,
+    );
+  });
+
+  test("a pretend time reaches only the preview survey and stores nothing", async ({
+    page,
+  }) => {
+    await page.clock.setFixedTime(LATER_CLOCK);
+    const query =
+      "now=&nectar-survey=preview&nectar-survey-now=2026-10-20T10:00";
+
+    // The live survey is open at the pretend time, yet it does not show.
+    await serveLiveSurveysOnly(page);
+    await open(page, query);
+    await expectNoDialog(page);
+    expect(await storedKeys(page)).toEqual([]);
+
+    // With the preview survey back in the config, it shows at that time.
+    await page.unrouteAll();
+    await open(page, query);
+    await expect(previewDialog(page)).toBeVisible();
+    await expect(surveyDialog(page)).toHaveCount(0);
+    await previewDialog(page)
+      .getByRole("button", { name: "Not right now" })
+      .click();
+    await expectNoDialog(page);
+    expect(await storedKeys(page)).toEqual([]);
   });
 
   test("never stores state for a preview survey", async ({ page }) => {
