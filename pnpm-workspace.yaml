@@ -1,6 +1,5 @@
 allowBuilds:
   '@parcel/watcher': true
-  esbuild: true
 
 # React, React DOM and React Aria Components are direct dependencies, so a
 # peer that goes unmet is a mistake to report, never one to install quietly.
